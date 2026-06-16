@@ -1,0 +1,75 @@
+name: Deploy Quartz to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "37 2 * * *"  # 每天凌晨，错峰避免整点拥堵
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout digital-garden repo
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # ── 克隆 Obsidian vault（--depth 1 浅克隆）──
+      - name: Clone Obsidian vault
+        run: |
+          rm -rf content
+          git clone --depth 1 \
+            https://x-access-token:${{ secrets.OBSIDIAN_PAT }}@github.com/lyj090/Obsidian.git content
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      # ── 缓存 Quartz 插件（避免每次 clone 46 个插件仓库）──
+      - name: Restore Quartz plugin cache
+        id: plugin-cache
+        uses: actions/cache@v5
+        with:
+          path: .quartz/plugins
+          key: quartz-plugins-${{ hashFiles('quartz.lock.json') }}
+          restore-keys: |
+            quartz-plugins-
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Quartz plugins
+        if: steps.plugin-cache.outputs.cache-hit != 'true'
+        run: npx quartz plugin install
+
+      - name: Build Quartz
+        run: npx quartz build --concurrency 4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

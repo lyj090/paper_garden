@@ -27,21 +27,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Switch Pages from Jekyll (docs/) to GitHub Actions artifact deploy
+      # Requires Pages Source = "GitHub Actions" in repo Settings → Pages
       - name: Configure GitHub Pages source
         uses: actions/configure-pages@v5
-
-      - name: Use workflow-based Pages build
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          api="https://api.github.com/repos/${{ github.repository }}/pages"
-          headers=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
-          if curl -sf "${headers[@]}" "$api" >/dev/null; then
-            curl -sfL -X PATCH "${headers[@]}" "$api" -d '{"build_type":"workflow","cname":null}'
-          else
-            curl -sfL -X PUT "${headers[@]}" "$api" -d '{"build_type":"workflow"}'
-          fi
 
       # ── 克隆 Obsidian vault（--depth 1 浅克隆）──
       - name: Clone Obsidian vault

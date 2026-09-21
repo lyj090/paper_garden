@@ -113,23 +113,43 @@ function renderIndexSection(slug: string, groups: { label: string; items: Entry[
               "li",
               { class: "lit-item" },
               h(
-                "a",
-                { href: resolveRelative(slug, e.slug), class: "internal internal-link lit-title" },
-                e.title,
-              ),
-              h(
-                "span",
-                { class: "lit-meta" },
-                e.authors && h("span", { class: "lit-authors" }, e.authors),
-                e.year && h("span", { class: "lit-year" }, String(e.year)),
-                e.venue && h("span", { class: "lit-venue" }, e.venue),
-              ),
-              e.topics.map((t) =>
+                "div",
+                { class: "lit-card" },
                 h(
-                  "a",
-                  { class: "lit-tag", href: resolveRelative(slug, `tags/${t}`) },
-                  t.split("/")[1] ?? t,
+                  "h3",
+                  { class: "lit-card-title" },
+                  h(
+                    "a",
+                    {
+                      href: resolveRelative(slug, e.slug),
+                      class: "internal internal-link",
+                    },
+                    e.title,
+                  ),
                 ),
+                h(
+                  "div",
+                  { class: "lit-card-meta" },
+                  e.authors && h("span", { class: "lit-authors" }, e.authors),
+                  h(
+                    "span",
+                    { class: "lit-pub" },
+                    e.venue && h("span", { class: "lit-venue" }, e.venue),
+                    e.year && h("span", { class: "lit-year" }, String(e.year)),
+                  ),
+                ),
+                e.topics.length > 0 &&
+                  h(
+                    "div",
+                    { class: "lit-card-tags" },
+                    e.topics.map((t) =>
+                      h(
+                        "a",
+                        { class: "lit-tag", href: resolveRelative(slug, `tags/${t}`) },
+                        t.split("/")[1] ?? t,
+                      ),
+                    ),
+                  ),
               ),
             ),
           ),
@@ -325,48 +345,100 @@ const LiteratureBody = (() => {
 
 // Styles injected via component css (collected by the ComponentResources emitter)
 const css = `
-.lit-index { margin-top: 1rem; }
-.lit-index .lit-group { margin-block: 2rem 2.4rem; }
+/* ---- year group headers ---- */
+.lit-index { margin-top: 0.5rem; }
+.lit-index .lit-group { margin-block: 2.2rem 2.6rem; }
 .lit-index .lit-group h2 {
-  display: flex; align-items: center; gap: 0.5rem;
-  margin-block: 0 1rem;
+  display: flex; align-items: baseline; gap: 0.6rem;
+  margin-block: 0 1.1rem; padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--lightgray);
 }
 .lit-index .lit-count {
-  font-size: 0.72em; font-weight: 500; color: var(--gray);
+  font-size: 0.68em; font-weight: 500; color: var(--gray);
   background: var(--lightgray); border-radius: 999px;
-  padding: 0.1rem 0.6rem; line-height: 1.6;
+  padding: 0.05rem 0.65rem; line-height: 1.7;
 }
-.lit-index .lit-list { list-style: none; padding: 0; margin: 0; }
-.lit-index .lit-item {
+
+/* ---- paper cards ---- */
+.lit-index .lit-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 0.85rem;
+}
+.lit-index .lit-item { list-style: none; }
+.lit-index .lit-card {
+  border: 1px solid var(--lightgray);
+  border-left: 3px solid var(--lightgray);
+  border-radius: 8px;
+  padding: 0.85rem 1.1rem 0.9rem;
+  background: var(--light);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.lit-index .lit-card:hover {
+  border-left-color: var(--secondary);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+}
+.lit-index .lit-card-title {
+  margin: 0 0 0.4rem;
+  font-size: 1.02rem; font-weight: 600; line-height: 1.4;
+}
+.lit-index .lit-card-title a { color: var(--dark); }
+.lit-index .lit-card-title a:hover { color: var(--secondary); }
+
+/* meta row: authors · venue year */
+.lit-index .lit-card-meta {
   display: flex; flex-wrap: wrap; align-items: baseline;
-  gap: 0.35rem 0.75rem; padding-block: 0.55rem;
-  border-bottom: 1px solid var(--lightgray);
-}
-.lit-index .lit-item:last-child { border-bottom: none; }
-.lit-index .lit-title { font-weight: 550; flex-basis: 100%; }
-@media all and (min-width: 800px) {
-  .lit-index .lit-title { flex-basis: auto; margin-right: 0.25rem; }
-}
-.lit-index .lit-meta {
-  display: inline-flex; flex-wrap: wrap; gap: 0.4rem 0.75rem;
-  font-size: 0.82rem; color: var(--gray);
+  gap: 0.25rem 0.9rem;
+  font-size: 0.8rem; color: var(--gray);
+  margin-bottom: 0.45rem;
 }
 .lit-index .lit-authors {
-  max-width: 30ch; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.lit-index .lit-year, .lit-index .lit-venue { font-variant-numeric: tabular-nums; }
-.lit-index .lit-venue { font-style: italic; }
+.lit-index .lit-pub {
+  display: inline-flex; align-items: baseline; gap: 0.4rem;
+  white-space: nowrap;
+}
+.lit-index .lit-venue {
+  font-style: italic; color: var(--darkgray);
+  background: var(--lightgray);
+  border-radius: 4px; padding: 0 0.4rem;
+  font-size: 0.92em;
+}
+.lit-index .lit-year { font-variant-numeric: tabular-nums; }
+
+/* topic tag pills */
+.lit-index .lit-card-tags {
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+}
 .lit-index .lit-tag {
-  font-size: 0.72rem; border: 1px solid var(--lightgray);
-  border-radius: 999px; padding: 0.05rem 0.55rem;
-  color: var(--darkgray); background: none; opacity: 0.85;
+  font-size: 0.7rem; line-height: 1.5;
+  border: none; border-radius: 999px;
+  padding: 0.08rem 0.6rem;
+  color: var(--darkgray);
+  background: color-mix(in srgb, var(--secondary) 8%, transparent);
 }
-.lit-index .lit-tag:hover { opacity: 1; border-color: var(--gray); }
+.lit-index .lit-tag::before { content: ""; }
+.lit-index .lit-tag:hover {
+  color: var(--secondary);
+  background: color-mix(in srgb, var(--secondary) 16%, transparent);
+}
+
+/* summary footer */
 .lit-summary {
   margin-top: 2.5rem; padding-top: 1rem;
   border-top: 1px solid var(--lightgray);
   font-size: 0.85rem; color: var(--gray);
+}
+
+/* dark mode adjustments */
+:root[saved-theme="dark"] .lit-index .lit-card,
+:root.dark .lit-index .lit-card {
+  box-shadow: none;
+}
+:root[saved-theme="dark"] .lit-index .lit-card:hover,
+:root.dark .lit-index .lit-card:hover {
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
 }
 `.trim()
 

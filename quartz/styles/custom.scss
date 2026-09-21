@@ -62,3 +62,93 @@
     width: 100%;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Paper list pages (folder/tag listings): card layout so individual papers
+// stand apart instead of blending into one text stream.
+// ---------------------------------------------------------------------------
+ul.section-ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+li.section-li {
+  margin-bottom: 0;
+
+  & > .section {
+    display: block;
+    border: 1px solid var(--lightgray);
+    border-left: 3px solid var(--lightgray);
+    border-radius: 8px;
+    padding: 0.85rem 1.1rem 0.9rem;
+    background: var(--light);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+
+    &:hover {
+      border-left-color: var(--secondary);
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+    }
+
+    & > .meta {
+      margin: 0 0 0.35rem;
+      opacity: 0.6;
+      font-size: 0.78rem;
+    }
+
+    & > .desc > h3 {
+      margin: 0 0 0.4rem;
+      font-size: 1.02rem;
+      font-weight: 600;
+      line-height: 1.4;
+
+      & > a {
+        background-color: transparent;
+        color: var(--dark);
+
+        &:hover {
+          color: var(--secondary);
+        }
+      }
+    }
+
+    // tag pills — right-aligned column becomes an inline wrap row
+    & > .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin: 0;
+
+      & > li {
+        list-style: none;
+      }
+
+      & > li > a.tag-link {
+        font-size: 0.7rem;
+        line-height: 1.5;
+        border: none;
+        border-radius: 999px;
+        padding: 0.08rem 0.6rem;
+        color: var(--darkgray);
+        background: color-mix(in srgb, var(--secondary) 8%, transparent);
+
+        &::before {
+          content: "";
+        }
+
+        &:hover {
+          color: var(--secondary);
+          background: color-mix(in srgb, var(--secondary) 16%, transparent);
+        }
+      }
+    }
+  }
+}
+
+.popover .section {
+  border: none;
+  padding: 0;
+  box-shadow: none !important;
+}

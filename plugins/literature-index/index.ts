@@ -13,8 +13,8 @@ import type { Node, Element } from "hast"
 
 // ---------------------------------------------------------------------------
 // Literature index — build-time replacement for the vault's Dataview tables,
-// which Quartz does not execute. Public grouping is by year; reading-status
-// tags (status/deep-read etc.) are private and stripped from the public build.
+// which Quartz does not execute. Public grouping is by research area
+// (frontmatter area/* tags); private namespaces are stripped from the build.
 // ---------------------------------------------------------------------------
 
 type Fm = Record<string, any>
@@ -26,10 +26,31 @@ interface Entry {
   year: number | null
   venue: string | null
   topics: string[]
+  kind: string | null
+  areas: string[]
   date: Date | null
 }
 
 const PREFIX = "02-literature"
+
+/** area slug -> display label (frontmatter uses area/<slug>) */
+const AREA_LABELS: Record<string, string> = {
+  robotics: "机器人学",
+  "machine-learning": "机器学习",
+  "computer-vision": "计算机视觉",
+  control: "控制",
+  "control-theory": "控制理论",
+  tools: "工具与系统",
+}
+
+const AREA_ORDER = [
+  "robotics",
+  "machine-learning",
+  "computer-vision",
+  "control",
+  "control-theory",
+  "tools",
+]
 
 function toNum(v: unknown): number | null {
   const n = typeof v === "string" ? parseInt(v, 10) : typeof v === "number" ? v : NaN
@@ -43,15 +64,17 @@ function toDate(v: unknown): Date | null {
 }
 
 function makeEntry(slug: string, fm: Fm): Entry {
+  const tags: string[] = fm.tags ?? []
+  const kindTag = tags.find((t) => t.startsWith("type/") && t !== "type/paper")
   return {
     slug,
     title: (fm.title as string) ?? slug,
     authors: Array.isArray(fm.authors) ? (fm.authors as string[]).join(", ") : null,
     year: toNum(fm.year),
     venue: typeof fm.venue === "string" && fm.venue ? fm.venue : null,
-    topics: ((fm.tags as string[]) ?? [])
-      .filter((t) => t.startsWith("topic/") || t.startsWith("method/"))
-      .slice(0, 4),
+    topics: tags.filter((t) => t.startsWith("topic/") || t.startsWith("method/")).slice(0, 3),
+    kind: kindTag ? kindTag.split("/")[1] : null,
+    areas: tags.filter((t) => t.startsWith("area/")).map((t) => t.slice("area/".length)),
     date: toDate(fm.date ?? fm.created),
   }
 }
@@ -75,35 +98,68 @@ function collectEntries(allFiles: { slug?: string; frontmatter?: Fm }[]): Entry[
   return entries
 }
 
-function groupByYear(entries: Entry[]): { label: string; items: Entry[] }[] {
-  const byYear = new Map<string, Entry[]>()
+interface Group {
+  label: string
+  anchor: string
+  items: Entry[]
+}
+
+function groupByArea(entries: Entry[]): Group[] {
+  const byArea = new Map<string, Entry[]>()
   for (const e of entries) {
-    const key = e.year ? String(e.year) : e.date ? String(e.date.getFullYear()) : "其他"
-    const list = byYear.get(key) ?? []
-    list.push(e)
-    byYear.set(key, list)
+    // a paper can span multiple areas — list it under each (dedup by title)
+    const areas = e.areas.length > 0 ? e.areas : ["其他"]
+    for (const a of areas) {
+      const list = byArea.get(a) ?? []
+      if (!list.some((x) => x.slug === e.slug)) list.push(e)
+      byArea.set(a, list)
+    }
   }
-  return [...byYear.entries()]
-    .sort((a, b) => {
-      if (a[0] === "其他") return 1
-      if (b[0] === "其他") return -1
-      return b[0].localeCompare(a[0])
-    })
-    .map(([label, items]) => ({ label, items }))
+  const groups: Group[] = []
+  for (const area of AREA_ORDER) {
+    const items = byArea.get(area)
+    if (items && items.length > 0) {
+      groups.push({ label: AREA_LABELS[area] ?? area, anchor: area, items })
+    }
+  }
+  for (const [area, items] of byArea) {
+    if (!AREA_ORDER.includes(area) && area !== "其他") {
+      groups.push({ label: AREA_LABELS[area] ?? area, anchor: area, items })
+    }
+  }
+  const other = byArea.get("其他")
+  if (other && other.length > 0) {
+    groups.push({ label: "其他", anchor: "other", items: other })
+  }
+  return groups
 }
 
 // ---------------------------------------------------------------------------
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
-function renderIndexSection(slug: string, groups: { label: string; items: Entry[] }[]) {
+function renderIndexSection(slug: string, groups: Group[]) {
   return h(
     "div",
     { class: "lit-index" },
+    // area quick-nav
+    groups.length > 1 &&
+      h(
+        "nav",
+        { class: "lit-nav" },
+        groups.map((g) =>
+          h(
+            "a",
+            { href: `#${g.anchor}`, class: "lit-nav-link" },
+            g.label,
+            h("span", { class: "lit-nav-count" }, String(g.items.length)),
+          ),
+        ),
+      ),
     groups.map((g) =>
       h(
         "section",
-        { class: "lit-group" },
+        { class: "lit-group", id: g.anchor },
         h("h2", {}, g.label, h("span", { class: "lit-count" }, String(g.items.length))),
         h(
           "ul",
@@ -134,6 +190,7 @@ function renderIndexSection(slug: string, groups: { label: string; items: Entry[
                   h(
                     "span",
                     { class: "lit-pub" },
+                    e.kind && h("span", { class: "lit-kind" }, e.kind),
                     e.venue && h("span", { class: "lit-venue" }, e.venue),
                     e.year && h("span", { class: "lit-year" }, String(e.year)),
                   ),
@@ -326,14 +383,14 @@ const renderBody = (props: QuartzComponentProps) => {
   }
 
   const entries = collectEntries(props.allFiles as any)
-  const groups = groupByYear(entries)
+  const groups = groupByArea(entries)
 
   return h(
     "div",
     { class: "lit-page" },
     original,
-    h("div", { class: "lit-summary" }, `共 ${entries.length} 篇文献 · 构建时自动生成`),
     renderIndexSection(slug, groups),
+    h("div", { class: "lit-summary" }, `共 ${entries.length} 篇文献 · 构建时自动生成`),
   )
 }
 
@@ -405,6 +462,13 @@ const css = `
   border-radius: 4px; padding: 0 0.4rem;
   font-size: 0.92em;
 }
+.lit-index .lit-kind {
+  text-transform: capitalize;
+  color: var(--secondary);
+  background: color-mix(in srgb, var(--secondary) 10%, transparent);
+  border-radius: 4px; padding: 0 0.45rem;
+  font-size: 0.92em; font-weight: 550;
+}
 .lit-index .lit-year { font-variant-numeric: tabular-nums; }
 
 /* topic tag pills */
@@ -422,6 +486,29 @@ const css = `
 .lit-index .lit-tag:hover {
   color: var(--secondary);
   background: color-mix(in srgb, var(--secondary) 16%, transparent);
+}
+
+/* ---- area quick-nav ---- */
+.lit-nav {
+  display: flex; flex-wrap: wrap; gap: 0.5rem;
+  margin-block: 1rem 1.5rem;
+}
+.lit-nav-link {
+  font-size: 0.82rem;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  border: 1px solid var(--lightgray);
+  border-radius: 999px;
+  padding: 0.25rem 0.85rem;
+  color: var(--darkgray);
+  background: none;
+}
+.lit-nav-link:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+.lit-nav-count {
+  font-size: 0.85em; color: var(--gray);
+  font-variant-numeric: tabular-nums;
 }
 
 /* summary footer */

@@ -34,6 +34,8 @@ configuration:
     - 01-Projects-MOC.md
     # 私人内容:阅读进度/计划不对外发布
     - 02-Literature/论文阅读记录.md
+    # AI 助手配置(含脚本路径与 vault 结构),不对外发布
+    - AGENT.md
   theme:
     fontOrigin: googleFonts
     cdnCaching: true

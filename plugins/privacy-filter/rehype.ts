@@ -19,6 +19,30 @@ const PRIVATE_TEXT_PATTERNS = [
   "status/to-read",
 ]
 
+/**
+ * Tag namespaces that never appear on the public site:
+ *  - status/*  reading lifecycle (private)
+ *  - rel/*     thesis / project relationships (private)
+ *  - proj/*    private project bindings
+ *  - source/*  venue origin — redundant, the venue frontmatter badge shows it
+ * Individual tags: type/paper is the default on every paper note (zero signal);
+ * type/survey, type/benchmark, type/dataset stay since they are informative.
+ */
+const PRIVATE_TAG_PREFIXES = ["status/", "rel/", "proj/", "source/"]
+const PRIVATE_TAG_NAMES = new Set(["type/paper"])
+
+export function isPrivateTag(tag: string): boolean {
+  return PRIVATE_TAG_NAMES.has(tag) || PRIVATE_TAG_PREFIXES.some((p) => tag.startsWith(p))
+}
+
+function filterTags(tags: unknown): string[] | null {
+  if (!Array.isArray(tags)) return null
+  const kept = (tags as unknown[]).filter(
+    (t) => typeof t === "string" && !isPrivateTag(t),
+  ) as string[]
+  return kept
+}
+
 function isPrivateHref(href: string): boolean {
   const decoded = (() => {
     try {
@@ -55,9 +79,7 @@ export const rehypeStripPrivate = (): Plugin<[], HastRoot> => {
     // 1. remove private tags from frontmatter (tags pages, properties view, search)
     const fm = file.data?.frontmatter as Record<string, unknown> | undefined
     if (fm && Array.isArray(fm.tags)) {
-      fm.tags = (fm.tags as string[]).filter(
-        (t) => typeof t === "string" && !t.startsWith("status/"),
-      )
+      fm.tags = filterTags(fm.tags)
     }
 
     // note-properties keeps its own copy of the frontmatter — scrub it too
@@ -65,9 +87,7 @@ export const rehypeStripPrivate = (): Plugin<[], HastRoot> => {
       | { properties?: Record<string, unknown> }
       | undefined
     if (noteProps?.properties && Array.isArray(noteProps.properties.tags)) {
-      noteProps.properties.tags = (noteProps.properties.tags as string[]).filter(
-        (t) => typeof t === "string" && !t.startsWith("status/"),
-      )
+      noteProps.properties.tags = filterTags(noteProps.properties.tags)
     }
 
     // 2. neutralize links to private pages (keep anchor text context)
@@ -120,13 +140,40 @@ export const rehypeStripPrivate = (): Plugin<[], HastRoot> => {
       return index
     })
 
-    // 5. scrub remaining private phrases from text nodes (search index safety)
+    // 5. remove dataview code blocks on any page (Quartz cannot execute them,
+    //    and their query text leaks vault-internal details into search)
+    visit(tree, "element", (node: any, index, parent) => {
+      if (!parent || typeof index !== "number") return
+      const lang = node.properties?.dataLanguage ?? node.properties?.data_language
+      const cls = Array.isArray(node.properties?.className)
+        ? (node.properties.className as string[]).join(" ")
+        : String(node.properties?.className ?? "")
+      const isDv =
+        lang === "dataview" ||
+        cls.includes("language-dataview") ||
+        cls.includes("dataview") ||
+        (node.tagName === "figure" && JSON.stringify(node.children ?? []).includes("dataview"))
+      if (isDv) {
+        parent.children.splice(index, 1)
+        return index
+      }
+    })
+
+    // 6. scrub tool paths and private phrases from text nodes (search index safety)
     visit(tree, "text", (node: any) => {
       if (
         typeof node.value === "string" &&
-        PRIVATE_TEXT_PATTERNS.some((p) => node.value.includes(p))
+        (PRIVATE_TEXT_PATTERNS.some((p) => node.value.includes(p)) ||
+          /zotero_cli|ai-workflows|\.scripts\//.test(node.value))
       ) {
         node.value = cleanText(node.value)
+        for (const re of [
+          /zotero_cli[^\s,;)。]*\.?/g,
+          /ai-workflows[^\s,;)。]*/g,
+          /\.scripts\/[^\s,;)。]*/g,
+        ]) {
+          node.value = node.value.replace(re, "")
+        }
       }
     })
   }

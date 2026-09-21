@@ -110,8 +110,8 @@ const LitIndexNavComponent: QuartzComponent = (props: QuartzComponentProps) => {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
 
-  // --- literature pages: full nav; other pages: compact shortcut ----------
-  const inLit = slug.startsWith(`${PREFIX}/`)
+  // --- literature pages (incl. tag pages): full nav; others: shortcut -----
+  const inLit = slug.startsWith(`${PREFIX}/`) || slug.startsWith("tags/")
   const areaEls = areaLinks.map((a) =>
     h(
       "a",
@@ -133,17 +133,37 @@ const LitIndexNavComponent: QuartzComponent = (props: QuartzComponentProps) => {
   )
 
   if (inLit) {
+    // full tag cloud with counts — data-tag attrs let the filter controller
+    // turn these into client-side toggles on any lit page
+    const allTagCounts = new Map<string, number>()
+    for (const e of entries) {
+      for (const t of new Set(e.topics)) allTagCounts.set(t, (allTagCounts.get(t) ?? 0) + 1)
+    }
+    const allTagEls = [...allTagCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([t, n]) =>
+        h(
+          "a",
+          {
+            href: resolveRelative(slug, `tags/${t}`),
+            class: "lit-leftnav-link lit-leftnav-topic",
+            "data-tag": t,
+          },
+          h("span", { class: "lit-leftnav-label" }, t.split("/")[1] ?? t),
+          h("span", { class: "lit-leftnav-count" }, String(n)),
+        ),
+      )
     return h(
       "div",
       { class: "lit-leftnav" },
       h("div", { class: "lit-leftnav-title" }, "文献分区"),
       areaEls,
-      topTopics.length > 0 &&
+      allTagEls.length > 0 &&
         h(
           "div",
-          { class: "lit-leftnav-section" },
-          h("div", { class: "lit-leftnav-title" }, "常用主题"),
-          topicEls,
+          { class: "lit-leftnav-section lit-leftnav-tags" },
+          h("div", { class: "lit-leftnav-title" }, "主题标签"),
+          allTagEls,
         ),
     )
   }
@@ -196,7 +216,7 @@ body[data-slug="index"] .lit-leftnav-desc {
 body[data-slug="index"] .explorer { display: none; }
 
 /* --- literature pages: full 分区 + 常用主题 nav --- */
-body[data-slug^="02-literature"] .lit-leftnav,
+body[data-slug^="02-literature"], body[data-slug^="tags"] .lit-leftnav,
 body[data-slug="02-literature"] .lit-leftnav {
   display: flex; flex-direction: column; gap: 0.1rem;
   padding: 0.25rem 0 0.75rem;
@@ -204,6 +224,7 @@ body[data-slug="02-literature"] .lit-leftnav {
   border-bottom: 1px solid var(--lightgray);
 }
 body[data-slug^="02-literature"] .lit-leftnav-title,
+body[data-slug^="tags"] .lit-leftnav-title,
 body[data-slug="02-literature"] .lit-leftnav-title {
   font-size: 0.68rem; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.06em;
@@ -211,11 +232,13 @@ body[data-slug="02-literature"] .lit-leftnav-title {
   margin-block: 0.3rem 0.25rem;
 }
 body[data-slug^="02-literature"] .lit-leftnav-section,
+body[data-slug^="tags"] .lit-leftnav-section,
 body[data-slug="02-literature"] .lit-leftnav-section {
   border-top: 1px solid var(--lightgray);
   margin-top: 0.35rem; padding-top: 0.15rem;
 }
 body[data-slug^="02-literature"] .lit-leftnav-link,
+body[data-slug^="tags"] .lit-leftnav-link,
 body[data-slug="02-literature"] .lit-leftnav-link {
   display: flex; align-items: center; justify-content: space-between;
   gap: 0.6rem;
@@ -225,16 +248,35 @@ body[data-slug="02-literature"] .lit-leftnav-link {
   color: var(--darkgray);
 }
 body[data-slug^="02-literature"] .lit-leftnav-link:hover,
+body[data-slug^="tags"] .lit-leftnav-link:hover,
 body[data-slug="02-literature"] .lit-leftnav-link:hover {
   background: color-mix(in srgb, var(--secondary) 8%, transparent);
   color: var(--secondary);
 }
 body[data-slug^="02-literature"] .lit-leftnav-count,
+body[data-slug^="tags"] .lit-leftnav-count,
 body[data-slug="02-literature"] .lit-leftnav-count {
   font-size: 0.7rem; color: var(--gray);
   font-variant-numeric: tabular-nums;
 }
+body[data-slug^="tags"] .lit-leftnav-tags,
+body[data-slug^="02-literature"] .lit-leftnav-tags,
+body[data-slug^="tags"] .lit-leftnav-tags,
+body[data-slug="02-literature"] .lit-leftnav-tags {
+  max-height: 14rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+body[data-slug^="tags"] .lit-leftnav-link.lit-tag-active,
+body[data-slug^="02-literature"] .lit-leftnav-link.lit-tag-active,
+body[data-slug^="tags"] .lit-leftnav-link.lit-tag-active,
+body[data-slug="02-literature"] .lit-leftnav-link.lit-tag-active {
+  background: color-mix(in srgb, var(--secondary) 14%, transparent);
+  color: var(--secondary);
+  font-weight: 600;
+}
 body[data-slug^="02-literature"] .lit-leftnav-topic .lit-leftnav-label::before,
+body[data-slug^="tags"] .lit-leftnav-topic .lit-leftnav-label::before,
 body[data-slug="02-literature"] .lit-leftnav-topic .lit-leftnav-label::before {
   content: "#"; opacity: 0.5; margin-right: 0.1rem;
 }

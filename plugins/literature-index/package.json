@@ -8,7 +8,10 @@
     "displayName": "Literature Index",
     "description": "Auto literature indexes grouped by research area",
     "version": "1.1.0",
-    "category": ["pageType", "component"],
+    "category": [
+      "pageType",
+      "component"
+    ],
     "defaultOrder": 40,
     "components": {
       "LitIndexNav": {
@@ -20,6 +23,7 @@
   },
   "exports": {
     ".": "./index.ts",
-    "./components": "./components/LitIndexNav.ts"
+    "./components": "./components/LitIndexNav.ts",
+    "./filter": "./components/lit-filter.ts"
   }
 }

@@ -10,6 +10,7 @@ import type {
 import { resolveRelative } from "@quartz-community/utils/path"
 import { htmlToJsx } from "@quartz-community/utils/jsx"
 import type { Node, Element } from "hast"
+import { LIT_FILTER_SCRIPT } from "./components/lit-filter.ts"
 
 // ---------------------------------------------------------------------------
 // Literature index — build-time replacement for the vault's Dataview tables,
@@ -177,18 +178,18 @@ function groupByArea(entries: Entry[]): Group[] {
 
 /** Toolbar for client-side sort / filter of the paper cards. Sort keys are
  *  embedded as data-* attributes on each card at build time. */
-const toolbarScript = `
-(function () {
-  var index = document.querySelector(".lit-index")
-  if (!index) return
-  var cards = Array.prototype.slice.call(index.querySelectorAll(".lit-item"))
+/** Client bootstrap: binds the shared filter controller to this page's DOM.
+ *  State precedence: URL query string > page's own tag (tag pages) > defaults. */
+const toolbarScript =
+  LIT_FILTER_SCRIPT +
+  `;(function () {
+  var root = document.querySelector(".lit-index")
+  if (!root) return
+  var cards = Array.prototype.slice.call(root.querySelectorAll(".lit-item"))
   if (cards.length === 0) return
-  var flat = index.querySelector(".lit-flat")
-  var list = index.querySelector(".lit-list")
-  if (!flat || !list) return
-
-  // move every card into one flat list; group headers are rebuilt on sort
-  var groups = Array.prototype.slice.call(index.querySelectorAll(".lit-group"))
+  var flat = root.querySelector(".lit-flat")
+  if (!flat) return
+  var groups = Array.prototype.slice.call(root.querySelectorAll(".lit-group"))
   var groupOf = new Map()
   groups.forEach(function (g) {
     var key = g.id
@@ -197,193 +198,26 @@ const toolbarScript = `
       item.remove()
     })
   })
-
-  var state = { sort: "added-desc", source: "all", query: "", tagList: [] }
-
-  // tag pages: start with the page's own tag pre-applied (build-time context)
   var tagCtx = document.querySelector(".lit-tag-context")
-  if (tagCtx) {
-    var ownTag = tagCtx.getAttribute("data-tag") || ""
-    if (ownTag) state.tagList.push(ownTag)
-  }
-  var chipBar = index.querySelector(".lit-chipbar")
+  var ownTag = tagCtx ? tagCtx.getAttribute("data-tag") || "" : ""
 
-  function fmtDate(ts) {
-    var d = new Date(ts)
-    return d.toLocaleDateString("zh-CN", { year: "numeric", month: "short" })
+  var urlState = window.LitFilter.stateFromSearch(location.search)
+  if (ownTag && urlState.tagList.indexOf(ownTag) === -1) {
+    urlState.tagList.unshift(ownTag)
   }
 
-  function apply() {
-    renderTagChips()
-    if (chipBar) {
-      if (state.tagList.length > 0) chipBar.classList.add("lit-has-chips")
-      else chipBar.classList.remove("lit-has-chips")
-    }
-    // highlight tag pills that are part of the active filter
-    cards.forEach(function (item) {
-      var pill = item.querySelector(".lit-tag")
-      item.querySelectorAll("a.lit-tag").forEach(function (p) {
-        var t = (p.getAttribute("data-tag") || "").toLowerCase()
-        if (state.tagList.map(function (x) { return x.toLowerCase() }).indexOf(t) >= 0) {
-          p.classList.add("lit-tag-active")
-        } else {
-          p.classList.remove("lit-tag-active")
-        }
-      })
-    })
-    // filter
-    var visible = cards.filter(function (item) {
-      var card = item.querySelector(".lit-card")
-      var src = card.getAttribute("data-source")
-      if (state.source === "paper" && src !== "paper") return false
-      if (state.source === "clip" && src !== "clip") return false
-      if (state.tagList.length > 0) {
-        var tags = (card.getAttribute("data-tags") || "").toLowerCase().split("|")
-        for (var i = 0; i < state.tagList.length; i++) {
-          if (tags.indexOf(state.tagList[i].toLowerCase()) === -1) return false
-        }
-      }
-      if (state.query) {
-        var hay = (card.getAttribute("data-search") || "").toLowerCase()
-        if (hay.indexOf(state.query) === -1) return false
-      }
-      return true
-    })
-
-    // sort
-    var cmp = {
-      "added-desc": function (a, b) {
-        return (b.querySelector(".lit-card").getAttribute("data-added") || 0) -
-               (a.querySelector(".lit-card").getAttribute("data-added") || 0)
-      },
-      "added-asc": function (a, b) {
-        return (a.querySelector(".lit-card").getAttribute("data-added") || 0) -
-               (b.querySelector(".lit-card").getAttribute("data-added") || 0)
-      },
-      "year-desc": function (a, b) {
-        return (b.querySelector(".lit-card").getAttribute("data-year") || 0) -
-               (a.querySelector(".lit-card").getAttribute("data-year") || 0) ||
-               a.querySelector(".lit-card").getAttribute("data-title").localeCompare(
-                 b.querySelector(".lit-card").getAttribute("data-title"))
-      },
-      "year-asc": function (a, b) {
-        return (a.querySelector(".lit-card").getAttribute("data-year") || 0) -
-               (b.querySelector(".lit-card").getAttribute("data-year") || 0) ||
-               a.querySelector(".lit-card").getAttribute("data-title").localeCompare(
-                 b.querySelector(".lit-card").getAttribute("data-title"))
-      },
-      "title-asc": function (a, b) {
-        return a.querySelector(".lit-card").getAttribute("data-title").localeCompare(
-          b.querySelector(".lit-card").getAttribute("data-title"))
-      },
-      "title-desc": function (a, b) {
-        return b.querySelector(".lit-card").getAttribute("data-title").localeCompare(
-          a.querySelector(".lit-card").getAttribute("data-title"))
-      },
-    }[state.sort]
-
-    visible.sort(cmp)
-
-    if (state.sort === "added-desc" && state.source === "all" && !state.query && state.tagList.length === 0) {
-      // default view: restore build-time area grouping
-      var byGroup = new Map()
-      visible.forEach(function (item) {
-        var key = groupOf.get(item) || "other"
-        if (!byGroup.has(key)) byGroup.set(key, [])
-        byGroup.get(key).push(item)
-      })
-      groups.forEach(function (g) {
-        var ul = g.querySelector(".lit-list")
-        ;(byGroup.get(g.id) || []).forEach(function (item) { ul.appendChild(item) })
-        g.style.display = (byGroup.get(g.id) || []).length > 0 ? "" : "none"
-      })
-      flat.classList.add("lit-hidden")
-    } else {
-      // flat ranked list with a date/year caption per card
-      groups.forEach(function (g) { g.style.display = "none" })
-      flat.classList.remove("lit-hidden")
-      visible.forEach(function (item) {
-        var card = item.querySelector(".lit-card")
-        var meta = card.querySelector(".lit-card-meta")
-        var stamp = meta.querySelector(".lit-added")
-        var added = parseInt(card.getAttribute("data-added") || "0", 10)
-        if (!isNaN(added) && added > 0) {
-          if (!stamp) {
-            stamp = document.createElement("span")
-            stamp.className = "lit-added"
-            meta.appendChild(stamp)
-          }
-          stamp.textContent = "入库 " + fmtDate(added)
-        }
-        flat.appendChild(item)
-      })
-    }
-
-    // per-group counts + toolbar result count
-    var count = index.querySelector(".lit-result-count")
-    if (count) count.textContent = String(visible.length)
-  }
-
-  index.addEventListener("change", function (e) {
-    var t = e.target
-    if (t.matches("[data-sort-select]")) {
-      state.sort = t.value
-      apply()
-    } else if (t.matches("[data-source-select]")) {
-      state.source = t.value
-      apply()
-    }
-  })
-  index.addEventListener("input", function (e) {
-    if (e.target.matches("[data-search-input]")) {
-      state.query = e.target.value.trim().toLowerCase()
-      apply()
-    }
-  })
-
-  // stacked tag filtering: clicking a tag pill toggles it in state.tagList
-  index.addEventListener("click", function (e) {
-    var t = e.target
-    // tag pill on a card
-    var pill = t.closest ? t.closest("[data-tag]") : null
-    if (pill && pill.classList && pill.classList.contains("lit-tag")) {
-      e.preventDefault()
-      toggleTag(pill.getAttribute("data-tag"))
-      return
-    }
-    // remove-button on an active tag chip
-    if (t.matches && t.matches("[data-tag-remove]")) {
-      e.preventDefault()
-      toggleTag(t.getAttribute("data-tag-remove"))
-    }
-  })
-
-  function toggleTag(tag) {
-    if (!tag) return
-    var i = state.tagList.indexOf(tag)
-    if (i >= 0) state.tagList.splice(i, 1)
-    else state.tagList.push(tag)
-    apply()
-  }
-
-  function renderTagChips() {
-    if (!chipBar) return
-    chipBar.innerHTML = ""
-    state.tagList.forEach(function (tag) {
-      var chip = document.createElement("span")
-      chip.className = "lit-chip"
-      chip.textContent = tag + " "
-      var x = document.createElement("button")
-      x.className = "lit-chip-x"
-      x.setAttribute("data-tag-remove", tag)
-      x.setAttribute("aria-label", "移除筛选 " + tag)
-      x.textContent = "×"
-      chip.appendChild(x)
-      chipBar.appendChild(chip)
-    })
-  }
-
-  apply()
+  window.LitFilter.create({
+    root: root,
+    cards: cards,
+    flat: flat,
+    groups: groups,
+    groupOf: groupOf,
+    chipBar: root.querySelector(".lit-chipbar"),
+    countEl: root.querySelector(".lit-result-count"),
+    searchInput: root.querySelector("[data-search-input]"),
+    sortSelect: root.querySelector("[data-sort-select]"),
+    sourceSelect: root.querySelector("[data-source-select]"),
+  }, urlState)
 })();
 `
 

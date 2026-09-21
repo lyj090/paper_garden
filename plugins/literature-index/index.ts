@@ -13,8 +13,8 @@ import type { Node, Element } from "hast"
 
 // ---------------------------------------------------------------------------
 // Literature index — build-time replacement for the vault's Dataview tables,
-// which Quartz does not execute. Groups by the same status tags the vault
-// uses: status/deep-read -> 已精读, status/to-read -> 入库未精读.
+// which Quartz does not execute. Public grouping is by year; reading-status
+// tags (status/deep-read etc.) are private and stripped from the public build.
 // ---------------------------------------------------------------------------
 
 type Fm = Record<string, any>
@@ -26,22 +26,8 @@ interface Entry {
   year: number | null
   venue: string | null
   topics: string[]
-  group: number
+  date: Date | null
 }
-
-const G_DEEP = 0
-const G_TOREAD = 1
-const G_WEB = 2
-const G_OTHER = 3
-
-const GROUP_META: Record<number, { title: string; desc: string; cls: string }> = {
-  [G_DEEP]: { title: "已精读", desc: "status/deep-read", cls: "lit-deep" },
-  [G_TOREAD]: { title: "入库未精读", desc: "status/to-read", cls: "lit-toread" },
-  [G_WEB]: { title: "网页剪藏", desc: "type/web-clip", cls: "lit-web" },
-  [G_OTHER]: { title: "其他文献", desc: "未标注状态", cls: "lit-other" },
-}
-
-const GROUP_ORDER = [G_DEEP, G_TOREAD, G_WEB, G_OTHER]
 
 const PREFIX = "02-literature"
 
@@ -50,12 +36,10 @@ function toNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function classify(fm: Fm, slug: string): number {
-  const tags: string[] = fm.tags ?? []
-  if (tags.includes("type/web-clip") || slug.startsWith(`${PREFIX}/webnotes`)) return G_WEB
-  if (tags.includes("status/deep-read")) return G_DEEP
-  if (tags.includes("status/to-read")) return G_TOREAD
-  return G_OTHER
+function toDate(v: unknown): Date | null {
+  if (!v) return null
+  const d = new Date(v as string)
+  return Number.isNaN(d.getTime()) ? null : d
 }
 
 function makeEntry(slug: string, fm: Fm): Entry {
@@ -68,13 +52,14 @@ function makeEntry(slug: string, fm: Fm): Entry {
     topics: ((fm.tags as string[]) ?? [])
       .filter((t) => t.startsWith("topic/") || t.startsWith("method/"))
       .slice(0, 4),
-    group: classify(fm, slug),
+    date: toDate(fm.date ?? fm.created),
   }
 }
 
 function sortEntries(a: Entry, b: Entry): number {
-  if (a.group !== b.group) return a.group - b.group
-  if (a.year !== b.year) return (b.year ?? 0) - (a.year ?? 0)
+  const da = a.date?.getTime() ?? 0
+  const db = b.date?.getTime() ?? 0
+  if (da !== db) return db - da
   return a.title.localeCompare(b.title)
 }
 
@@ -84,33 +69,42 @@ function collectEntries(allFiles: { slug?: string; frontmatter?: Fm }[]): Entry[
     const slug = data.slug
     if (!slug || !slug.startsWith(`${PREFIX}/`)) continue
     if (slug.endsWith("/index") || slug === `${PREFIX}/02-literature-moc`) continue
-    if (slug === `${PREFIX}/论文阅读记录`) continue
     entries.push(makeEntry(slug, data.frontmatter ?? {}))
   }
   entries.sort(sortEntries)
   return entries
 }
 
-function groupEntries(entries: Entry[]): { meta: (typeof GROUP_META)[number]; items: Entry[] }[] {
-  return GROUP_ORDER.map((g) => ({
-    meta: GROUP_META[g],
-    items: entries.filter((e) => e.group === g),
-  })).filter((gr) => gr.items.length > 0)
+function groupByYear(entries: Entry[]): { label: string; items: Entry[] }[] {
+  const byYear = new Map<string, Entry[]>()
+  for (const e of entries) {
+    const key = e.year ? String(e.year) : e.date ? String(e.date.getFullYear()) : "其他"
+    const list = byYear.get(key) ?? []
+    list.push(e)
+    byYear.set(key, list)
+  }
+  return [...byYear.entries()]
+    .sort((a, b) => {
+      if (a[0] === "其他") return 1
+      if (b[0] === "其他") return -1
+      return b[0].localeCompare(a[0])
+    })
+    .map(([label, items]) => ({ label, items }))
 }
 
 // ---------------------------------------------------------------------------
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
-function renderIndexSection(slug: string, groups: ReturnType<typeof groupEntries>) {
+function renderIndexSection(slug: string, groups: { label: string; items: Entry[] }[]) {
   return h(
     "div",
     { class: "lit-index" },
     groups.map((g) =>
       h(
         "section",
-        { class: `lit-group ${g.meta.cls}` },
-        h("h2", {}, g.meta.title, h("span", { class: "lit-count" }, String(g.items.length))),
+        { class: "lit-group" },
+        h("h2", {}, g.label, h("span", { class: "lit-count" }, String(g.items.length))),
         h(
           "ul",
           { class: "lit-list" },
@@ -196,10 +190,7 @@ function pruneEmptyDataviewSections(root: Node): void {
     }
     return false
   }
-  const isPrunable = (title: string): boolean =>
-    title.includes("Dataview 自动") ||
-    title.includes("最近新增文献") ||
-    title.includes("活跃文献笔记")
+  const isPrunable = (title: string): boolean => isPrivateHeading(title)
 
   let removed = true
   while (removed) {
@@ -232,6 +223,13 @@ function pruneEmptyDataviewSections(root: Node): void {
   }
 }
 
+/** Headings whose sections are pruned from public pages (also used to sync TOC). */
+const PRIVATE_HEADING_RE = /明日|精读建议|阅读计划|阅读顺序|Dataview 自动|最近新增文献|活跃文献笔记/
+
+function isPrivateHeading(text: string): boolean {
+  return PRIVATE_HEADING_RE.test(text)
+}
+
 function textOf(el: Element): string {
   let out = ""
   for (const c of el.children ?? []) {
@@ -239,6 +237,46 @@ function textOf(el: Element): string {
     else if (c.type === "element") out += textOf(c as Element)
   }
   return out
+}
+
+/** Remove private/reading-plan info from public pages:
+ *  - inline links to status/* tag pages and the reading-log note
+ *  - "精读状态" / "阅读管理" list items and paragraphs
+ *  Called after stripDataview. */
+function stripPrivateSections(root: Node): void {
+  const stripFrom = (parent: Element): void => {
+    if (!parent.children) return
+    parent.children = parent.children.filter((child) => {
+      if (child.type !== "element") return true
+      const el = child as Element
+
+      // links to private tag pages / reading log
+      if (el.tagName === "a") {
+        const href = String(el.properties?.href ?? "")
+        if (href.includes("/tags/status/") || href.includes("论文阅读记录")) return false
+        return true
+      }
+
+      // paragraphs / list items whose text is about reading status/plan
+      if (el.tagName === "p" || el.tagName === "li") {
+        const text = textOf(el)
+        if (text.includes("精读状态") || text.includes("阅读管理")) return false
+        // list item that only linked to the removed reading log
+        if (
+          el.tagName === "li" &&
+          el.children?.every((c) => c.type !== "text" || !((c as any).value ?? "").trim())
+        ) {
+          const links = el.children?.filter((c) => (c as Element).type === "element") ?? []
+          if (links.length > 0 && links.every((c) => (c as Element).tagName === "a")) return false
+        }
+      }
+      return true
+    })
+    for (const child of parent.children) {
+      if (child.type === "element") stripPrivateSections(child as Element)
+    }
+  }
+  stripFrom(root as Element)
 }
 
 // ---------------------------------------------------------------------------
@@ -253,37 +291,28 @@ const renderBody = (props: QuartzComponentProps) => {
   // drop the pruned headings here so the sidebar TOC matches the page.
   const toc = props.fileData.toc as { text: string }[] | undefined
   if (Array.isArray(toc)) {
-    props.fileData.toc = toc.filter(
-      (t) =>
-        !t.text.includes("Dataview 自动") &&
-        !t.text.includes("最近新增文献") &&
-        !t.text.includes("活跃文献笔记"),
-    )
+    props.fileData.toc = toc.filter((t) => !isPrivateHeading(t.text))
   }
 
   // Original markdown content (dataview blocks + their now-empty sections stripped)
   stripDataview(props.tree)
   pruneEmptyDataviewSections(props.tree)
+  stripPrivateSections(props.tree)
   const original = htmlToJsx(props.tree)
 
   if (slug !== `${PREFIX}/index`) {
-    // MOC / reading-log keep their hand-written content; index page is fully generated
+    // MOC keeps its hand-written content; index page is fully generated
     return h("div", { class: "lit-page" }, original)
   }
 
   const entries = collectEntries(props.allFiles as any)
-  const groups = groupEntries(entries)
-  const deep = entries.filter((e) => e.group === G_DEEP).length
+  const groups = groupByYear(entries)
 
   return h(
     "div",
     { class: "lit-page" },
     original,
-    h(
-      "div",
-      { class: "lit-summary" },
-      `共 ${entries.length} 篇文献 · 已精读 ${deep} 篇 · 构建时自动生成`,
-    ),
+    h("div", { class: "lit-summary" }, `共 ${entries.length} 篇文献 · 构建时自动生成`),
     renderIndexSection(slug, groups),
   )
 }
@@ -342,14 +371,10 @@ const css = `
 `.trim()
 
 // ---------------------------------------------------------------------------
-// Page type plugin — takes over the three literature navigation pages
+// Page type plugin — takes over the literature navigation pages
 // ---------------------------------------------------------------------------
 
-const LIT_SLUGS = new Set([
-  `${PREFIX}/index`,
-  `${PREFIX}/02-literature-moc`,
-  `${PREFIX}/论文阅读记录`,
-])
+const LIT_SLUGS = new Set([`${PREFIX}/index`, `${PREFIX}/02-literature-moc`])
 
 const LiteratureIndexPage: QuartzPageTypePlugin = () => ({
   name: "LiteratureIndexPage",
@@ -358,6 +383,20 @@ const LiteratureIndexPage: QuartzPageTypePlugin = () => ({
   layout: "content",
   body: LiteratureBody,
   treeTransforms: () => [
+    // public pages: drop reading-status tag links everywhere
+    (root, slug, componentData) => {
+      stripPrivateSections(root)
+      // keep private status/* tags out of rendered tag lists / properties view
+      const fm = componentData?.fileData?.frontmatter as Fm | undefined
+      if (fm && Array.isArray(fm.tags)) {
+        fm.tags = (fm.tags as string[]).filter((t) => !t.startsWith("status/"))
+      }
+      // TOC entries reference content pruned below — sync them
+      const toc = componentData?.fileData?.toc as { text: string }[] | undefined
+      if (Array.isArray(toc)) {
+        componentData.fileData.toc = toc.filter((t) => !isPrivateHeading(t.text))
+      }
+    },
     (root, slug) => {
       if (!LIT_SLUGS.has(slug)) return
       stripDataview(root)

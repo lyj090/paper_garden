@@ -32,6 +32,8 @@ configuration:
     - 02-Literature-MOC.md
     - 03-Concepts-MOC.md
     - 01-Projects-MOC.md
+    # 私人内容:阅读进度/计划不对外发布
+    - 02-Literature/论文阅读记录.md
   theme:
     fontOrigin: googleFonts
     cdnCaching: true
@@ -289,6 +291,9 @@ plugins:
   - source: ./plugins/literature-index
     enabled: true
     order: 15
+  - source: ./plugins/privacy-filter
+    enabled: true
+    order: 4
   - source: github:quartz-community/obsidian-plugin-excalidraw
     enabled: true
     options:

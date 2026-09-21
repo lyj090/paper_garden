@@ -152,3 +152,116 @@ li.section-li {
   padding: 0;
   box-shadow: none !important;
 }
+
+// ---------------------------------------------------------------------------
+// Noise reduction on structural pages (index / tag listings / literature MOC):
+// Properties table, dates and reading time add no value there and duplicate
+// the tag pills already shown on paper pages.
+// ---------------------------------------------------------------------------
+body[data-slug="index"] details.note-properties,
+body[data-slug^="tags"] details.note-properties,
+body[data-slug^="02-literature"] details.note-properties,
+body[data-slug="index"] .content-meta,
+body[data-slug="index"] ul.tags {
+  display: none;
+}
+
+// Literature landing + MOC pages: date / reading time / moc tags add no
+// information (the page IS the index), and on the landing page the
+// article title duplicates the first body heading.
+body[data-slug="02-literature/index"],
+body[data-slug="02-literature/02-literature-moc"] {
+  & .content-meta,
+  & ul.tags {
+    display: none;
+  }
+}
+
+body[data-slug="02-literature/index"] .article-title {
+  display: none;
+}
+
+// Homepage: the article title just repeats the sidebar site title, and the
+// graph is empty at the site root — both read as clutter there.
+body[data-slug="index"] .article-title,
+body[data-slug="index"] .graph {
+  display: none;
+}
+
+// ---------------------------------------------------------------------------
+// Homepage: hero line + three entry cards (literature index / tags / folders)
+// ---------------------------------------------------------------------------
+.home-hero {
+  font-size: 1.02rem;
+  color: var(--darkgray);
+  margin-block: 0.4rem 1.6rem;
+
+  strong {
+    color: var(--dark);
+    font-weight: 600;
+  }
+}
+
+.home-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.9rem;
+  margin-block: 1.2rem 2rem;
+}
+
+.home-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--lightgray);
+  border-radius: 10px;
+  background: var(--light);
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+
+  &:hover {
+    border-color: var(--secondary);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
+    transform: translateY(-1px);
+
+    .home-card-arrow {
+      transform: translateX(2px);
+      opacity: 1;
+    }
+  }
+
+  .home-card-icon {
+    font-size: 1.35rem;
+    line-height: 1;
+  }
+
+  .home-card-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .home-card-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--dark);
+  }
+
+  .home-card-desc {
+    margin-top: 0.2rem;
+    font-size: 0.76rem;
+    line-height: 1.5;
+    color: var(--gray);
+  }
+
+  .home-card-arrow {
+    color: var(--gray);
+    opacity: 0.6;
+    transition:
+      transform 0.15s ease,
+      opacity 0.15s ease;
+  }
+}

@@ -766,9 +766,6 @@ function buildLayoutForEntries(
       if (!altRegistered) continue
     }
 
-    console.log(
-      `[layout-debug] name=${name} registered=${!!registered} hasName=${!!componentRegistry.get(name)} hasPascal=${!!componentRegistry.get(name.split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(""))}`,
-    )
     const reg =
       registered ??
       componentRegistry.get(

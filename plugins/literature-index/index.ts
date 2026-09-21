@@ -29,6 +29,8 @@ interface Entry {
   kind: string | null
   areas: string[]
   date: Date | null
+  /** paper = ZoteroNotes (formal papers), clip = WebNotes (web excerpts) */
+  source: "paper" | "clip"
 }
 
 const PREFIX = "02-literature"
@@ -76,6 +78,7 @@ function makeEntry(slug: string, fm: Fm): Entry {
     kind: kindTag ? kindTag.split("/")[1] : null,
     areas: tags.filter((t) => t.startsWith("area/")).map((t) => t.slice("area/".length)),
     date: toDate(fm.date ?? fm.created),
+    source: slug.includes("/zoteronotes/") ? "paper" : "clip",
   }
 }
 
@@ -159,6 +162,190 @@ function groupByArea(entries: Entry[]): Group[] {
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
+/** Toolbar for client-side sort / filter of the paper cards. Sort keys are
+ *  embedded as data-* attributes on each card at build time. */
+const toolbarScript = `
+(function () {
+  var index = document.querySelector(".lit-index")
+  if (!index) return
+  var cards = Array.prototype.slice.call(index.querySelectorAll(".lit-item"))
+  if (cards.length === 0) return
+  var flat = index.querySelector(".lit-flat")
+  var list = index.querySelector(".lit-list")
+  if (!flat || !list) return
+
+  // move every card into one flat list; group headers are rebuilt on sort
+  var groups = Array.prototype.slice.call(index.querySelectorAll(".lit-group"))
+  var groupOf = new Map()
+  groups.forEach(function (g) {
+    var key = g.id
+    g.querySelectorAll(".lit-item").forEach(function (item) {
+      groupOf.set(item, key)
+      item.remove()
+    })
+  })
+
+  var state = { sort: "added-desc", source: "all", query: "" }
+
+  function fmtDate(ts) {
+    var d = new Date(ts)
+    return d.toLocaleDateString("zh-CN", { year: "numeric", month: "short" })
+  }
+
+  function apply() {
+    // filter
+    var visible = cards.filter(function (item) {
+      var card = item.querySelector(".lit-card")
+      var src = card.getAttribute("data-source")
+      if (state.source === "paper" && src !== "paper") return false
+      if (state.source === "clip" && src !== "clip") return false
+      if (state.query) {
+        var hay = (card.getAttribute("data-search") || "").toLowerCase()
+        if (hay.indexOf(state.query) === -1) return false
+      }
+      return true
+    })
+
+    // sort
+    var cmp = {
+      "added-desc": function (a, b) {
+        return (b.querySelector(".lit-card").getAttribute("data-added") || 0) -
+               (a.querySelector(".lit-card").getAttribute("data-added") || 0)
+      },
+      "added-asc": function (a, b) {
+        return (a.querySelector(".lit-card").getAttribute("data-added") || 0) -
+               (b.querySelector(".lit-card").getAttribute("data-added") || 0)
+      },
+      "year-desc": function (a, b) {
+        return (b.querySelector(".lit-card").getAttribute("data-year") || 0) -
+               (a.querySelector(".lit-card").getAttribute("data-year") || 0) ||
+               a.querySelector(".lit-card").getAttribute("data-title").localeCompare(
+                 b.querySelector(".lit-card").getAttribute("data-title"))
+      },
+      "year-asc": function (a, b) {
+        return (a.querySelector(".lit-card").getAttribute("data-year") || 0) -
+               (b.querySelector(".lit-card").getAttribute("data-year") || 0) ||
+               a.querySelector(".lit-card").getAttribute("data-title").localeCompare(
+                 b.querySelector(".lit-card").getAttribute("data-title"))
+      },
+      "title-asc": function (a, b) {
+        return a.querySelector(".lit-card").getAttribute("data-title").localeCompare(
+          b.querySelector(".lit-card").getAttribute("data-title"))
+      },
+      "title-desc": function (a, b) {
+        return b.querySelector(".lit-card").getAttribute("data-title").localeCompare(
+          a.querySelector(".lit-card").getAttribute("data-title"))
+      },
+    }[state.sort]
+
+    visible.sort(cmp)
+
+    if (state.sort === "added-desc" && state.source === "all" && !state.query) {
+      // default view: restore build-time area grouping
+      var byGroup = new Map()
+      visible.forEach(function (item) {
+        var key = groupOf.get(item) || "other"
+        if (!byGroup.has(key)) byGroup.set(key, [])
+        byGroup.get(key).push(item)
+      })
+      groups.forEach(function (g) {
+        var ul = g.querySelector(".lit-list")
+        ;(byGroup.get(g.id) || []).forEach(function (item) { ul.appendChild(item) })
+        g.style.display = (byGroup.get(g.id) || []).length > 0 ? "" : "none"
+      })
+      flat.classList.add("lit-hidden")
+    } else {
+      // flat ranked list with a date/year caption per card
+      groups.forEach(function (g) { g.style.display = "none" })
+      flat.classList.remove("lit-hidden")
+      visible.forEach(function (item) {
+        var card = item.querySelector(".lit-card")
+        var meta = card.querySelector(".lit-card-meta")
+        var stamp = meta.querySelector(".lit-added")
+        var added = parseInt(card.getAttribute("data-added") || "0", 10)
+        if (!isNaN(added) && added > 0) {
+          if (!stamp) {
+            stamp = document.createElement("span")
+            stamp.className = "lit-added"
+            meta.appendChild(stamp)
+          }
+          stamp.textContent = "入库 " + fmtDate(added)
+        }
+        flat.appendChild(item)
+      })
+    }
+
+    // per-group counts + toolbar result count
+    var count = index.querySelector(".lit-result-count")
+    if (count) count.textContent = String(visible.length)
+  }
+
+  index.addEventListener("change", function (e) {
+    var t = e.target
+    if (t.matches("[data-sort-select]")) {
+      state.sort = t.value
+      apply()
+    } else if (t.matches("[data-source-select]")) {
+      state.source = t.value
+      apply()
+    }
+  })
+  index.addEventListener("input", function (e) {
+    if (e.target.matches("[data-search-input]")) {
+      state.query = e.target.value.trim().toLowerCase()
+      apply()
+    }
+  })
+
+  apply()
+})();
+`
+
+function renderToolbar(): ReturnType<typeof h> {
+  const select = (attr: string, options: [string, string][]): ReturnType<typeof h> =>
+    h(
+      "select",
+      { class: "lit-toolbar-select", [attr]: "" },
+      options.map(([value, label]) => h("option", { value }, label)),
+    )
+
+  return h(
+    "div",
+    { class: "lit-toolbar" },
+    h("input", {
+      class: "lit-toolbar-search",
+      type: "search",
+      placeholder: "搜索标题 / 作者 / 标签…",
+      "data-search-input": "",
+      "aria-label": "搜索文献",
+    }),
+    h(
+      "label",
+      { class: "lit-toolbar-field" },
+      h("span", { class: "lit-toolbar-label" }, "类型"),
+      select("data-source-select", [
+        ["all", "全部"],
+        ["paper", "论文"],
+        ["clip", "网页摘录"],
+      ]),
+    ),
+    h(
+      "label",
+      { class: "lit-toolbar-field" },
+      h("span", { class: "lit-toolbar-label" }, "排序"),
+      select("data-sort-select", [
+        ["added-desc", "入库时间 新→旧"],
+        ["added-asc", "入库时间 旧→新"],
+        ["year-desc", "论文年份 新→旧"],
+        ["year-asc", "论文年份 旧→新"],
+        ["title-asc", "标题 A→Z"],
+        ["title-desc", "标题 Z→A"],
+      ]),
+    ),
+    h("span", { class: "lit-result" }, h("span", { class: "lit-result-count" }), " 篇"),
+  )
+}
+
 function renderIndexSection(slug: string, groups: Group[], topicNav: TopicNav[]) {
   return h(
     "div",
@@ -176,6 +363,8 @@ function renderIndexSection(slug: string, groups: Group[], topicNav: TopicNav[])
         ),
       ),
     ),
+    renderToolbar(),
+    h("ul", { class: "lit-flat lit-hidden" }),
     groups.map((g) =>
       h(
         "section",
@@ -184,13 +373,24 @@ function renderIndexSection(slug: string, groups: Group[], topicNav: TopicNav[])
         h(
           "ul",
           { class: "lit-list" },
-          g.items.map((e) =>
-            h(
+          g.items.map((e) => {
+            const search = [e.title, e.authors, ...e.topics, e.venue, e.year]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase()
+            return h(
               "li",
               { class: "lit-item" },
               h(
                 "div",
-                { class: "lit-card" },
+                {
+                  class: "lit-card",
+                  "data-added": e.date ? String(e.date.getTime()) : "",
+                  "data-year": e.year ? String(e.year) : "",
+                  "data-title": e.title,
+                  "data-source": e.source,
+                  "data-search": search,
+                },
                 h(
                   "h3",
                   { class: "lit-card-title" },
@@ -232,8 +432,8 @@ function renderIndexSection(slug: string, groups: Group[], topicNav: TopicNav[])
                     }),
                   ),
               ),
-            ),
-          ),
+            )
+          }),
         ),
       ),
     ),
@@ -421,6 +621,7 @@ const renderBody = (props: QuartzComponentProps) => {
 const LiteratureBody = (() => {
   const Body: QuartzComponent = (props: QuartzComponentProps) => renderBody(props)
   ;(Body as any).css = css as StringResource
+  ;(Body as any).afterDOMLoaded = toolbarScript as StringResource
   return Body
 }) as unknown as QuartzComponentConstructor
 
@@ -524,6 +725,70 @@ const css = `
 :root.dark .lit-index .lit-tag-method {
   background: color-mix(in srgb, #d4a72c 14%, transparent);
   color: color-mix(in srgb, #d4a72c 75%, var(--darkgray));
+}
+
+/* ---- toolbar: search / filter / sort (client-side over embedded data attrs) ---- */
+.lit-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 0.55rem;
+  margin-block: 0.75rem 1.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--lightgray);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--lightgray) 30%, var(--light));
+}
+.lit-toolbar-search {
+  flex: 1 1 11rem;
+  min-width: 0;
+  font: inherit; font-size: 0.85rem;
+  color: var(--dark);
+  background: var(--light);
+  border: 1px solid var(--lightgray);
+  border-radius: 8px;
+  padding: 0.32rem 0.7rem;
+  outline: none;
+}
+.lit-toolbar-search:focus {
+  border-color: var(--gray);
+}
+.lit-toolbar-field {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+}
+.lit-toolbar-label {
+  font-size: 0.75rem; color: var(--gray);
+}
+.lit-toolbar-select {
+  font: inherit; font-size: 0.8rem;
+  color: var(--darkgray);
+  background: var(--light);
+  border: 1px solid var(--lightgray);
+  border-radius: 8px;
+  padding: 0.28rem 0.5rem;
+  cursor: pointer;
+}
+.lit-toolbar-select:hover { border-color: var(--gray); }
+.lit-result {
+  margin-left: auto;
+  font-size: 0.78rem; color: var(--gray);
+  font-variant-numeric: tabular-nums;
+}
+/* stamp shown on cards when the list is flattened by sorting */
+.lit-index .lit-added {
+  font-size: 0.72rem; color: var(--gray);
+  background: var(--lightgray);
+  border-radius: 4px; padding: 0 0.45rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* flat container used when a sort other than the default grouping is active */
+.lit-index .lit-flat {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 0.85rem;
+}
+.lit-index .lit-flat.lit-hidden { display: none; }
+@media all and (max-width: 640px) {
+  .lit-result { display: none; }
+  .lit-toolbar-search { flex-basis: 100%; }
 }
 
 /* ---- mobile horizontal quick-nav (hidden on desktop: left sidebar nav takes over) ---- */

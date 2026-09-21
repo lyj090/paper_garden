@@ -1,6 +1,6 @@
 import type { PluggableList } from "unified"
 import type { QuartzFilterPlugin, QuartzTransformerPlugin } from "@quartz-community/types"
-import { rehypeStripPrivate, isPrivateTag } from "./rehype.ts"
+import { rehypeStripPrivate, isPrivateTag, PUBLIC_TAG_RE } from "./rehype.ts"
 
 /**
  * Privacy plugin — reading status, thesis/project relationships and
@@ -25,11 +25,13 @@ const PrivacyFilter: QuartzFilterPlugin = () => ({
   shouldPublish(_ctx, [_tree, vfile]) {
     const fm = vfile.data?.frontmatter as Record<string, unknown> | undefined
     if (fm && Array.isArray(fm.tags)) {
-      fm.tags = (fm.tags as string[]).filter((t) => !isPrivateTag(t))
+      fm.tags = (fm.tags as string[]).filter(
+        (t) => typeof t === "string" && !isPrivateTag(t) && PUBLIC_TAG_RE.test(t),
+      )
     }
     return true
   },
 })
 
 export { PrivacyTransformer, PrivacyFilter }
-export { isPrivateTag }
+export { isPrivateTag, PUBLIC_TAG_RE }

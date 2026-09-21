@@ -11,6 +11,7 @@ import { resolveRelative } from "@quartz-community/utils/path"
 import { htmlToJsx } from "@quartz-community/utils/jsx"
 import type { Node, Element } from "hast"
 import { LIT_FILTER_SCRIPT } from "./components/lit-filter.ts"
+import { PUBLIC_TAG_RE } from "../privacy-filter/rehype.ts"
 
 // ---------------------------------------------------------------------------
 // Literature index — build-time replacement for the vault's Dataview tables,
@@ -185,7 +186,17 @@ const toolbarScript =
   `;(function () {
   var root = document.querySelector(".lit-index")
   if (!root) return
-  var cards = Array.prototype.slice.call(root.querySelectorAll(".lit-item"))
+  var seen = new Set()
+  var cards = []
+  Array.prototype.slice.call(root.querySelectorAll(".lit-item")).forEach(function (item) {
+    // index page lists a paper under every area it belongs to; keep one
+    // canonical card per title so filters and the count stay accurate
+    var card = item.querySelector(".lit-card")
+    var key = card ? card.getAttribute("data-title") : item.id
+    if (key && seen.has(key)) { item.remove(); return }
+    if (key) seen.add(key)
+    cards.push(item)
+  })
   if (cards.length === 0) return
   var flat = root.querySelector(".lit-flat")
   if (!flat) return
@@ -200,11 +211,10 @@ const toolbarScript =
   })
   var tagCtx = document.querySelector(".lit-tag-context")
   var ownTag = tagCtx ? tagCtx.getAttribute("data-tag") || "" : ""
-
-  var urlState = window.LitFilter.stateFromSearch(location.search)
-  if (ownTag && urlState.tagList.indexOf(ownTag) === -1) {
-    urlState.tagList.unshift(ownTag)
-  }
+  // On tag pages the SSR'd list already contains only the own-tag papers;
+  // pass it as locked context (URL stays clean, back/forward keeps it).
+  var initial = window.LitFilter.stateFromSearch(location.search)
+  initial.lockedTag = ownTag
 
   window.LitFilter.create({
     root: root,
@@ -217,7 +227,7 @@ const toolbarScript =
     searchInput: root.querySelector("[data-search-input]"),
     sortSelect: root.querySelector("[data-sort-select]"),
     sourceSelect: root.querySelector("[data-source-select]"),
-  }, urlState)
+  }, initial)
 })();
 `
 
@@ -469,6 +479,31 @@ function textOf(el: Element): string {
   return out
 }
 
+/** Remove tag links whose target is not a real public tag page (junk tags
+ *  injected by the markdown tag parser, e.g. from "dot #1-#8" in prose). */
+function stripJunkTagLinks(root: Node): void {
+  const visit = (parent: Element): void => {
+    if (!parent.children) return
+    parent.children = parent.children.filter((child) => {
+      if (child.type !== "element") return true
+      const el = child as Element
+      if (el.tagName === "a") {
+        const href = String(el.properties?.href ?? "")
+        const m = /\/tags\/([^/?#]*)$/.exec(href)
+        // empty capture = link to /tags/ (the tag index) — that's legit
+        if (m && m[1] !== "" && !PUBLIC_TAG_RE.test(decodeURIComponent(m[1]))) {
+          return false // junk — the anchor text ("1-8") is prose, just drop it
+        }
+      }
+      return true
+    })
+    for (const child of parent.children) {
+      if (child.type === "element") visit(child as Element)
+    }
+  }
+  visit(root as Element)
+}
+
 /** Remove private/reading-plan info from public pages:
  *  - inline links to status/* tag pages and the reading-log note
  *  - "精读状态" / "阅读管理" list items and paragraphs
@@ -537,16 +572,25 @@ const renderBody = (props: QuartzComponentProps) => {
 
   if (isLitTagSlug(slug)) {
     // Tag page: unified card list with the same toolbar as the index page.
-    // The page's own tag is pre-applied as a client-side filter, and clicking
-    // tag pills on cards ADDS more filters (stacked, AND semantics).
-    const entries = collectEntries(props.allFiles as any)
+    // The page's own tag is a LOCKED client-side filter (always on, not
+    // serialized to the URL — the page path itself carries it). SSR renders
+    // only the matching entries so the page shows the right papers instantly,
+    // with no pre-JS flash of the full list. Clicking tag pills on cards
+    // ADDS more filters (stacked, AND semantics).
+    const ownTag = slug === "tags" || slug === "tags/index"
+      ? ""
+      : slug.split("/").slice(1).join("/")
+    const all = collectEntries(props.allFiles as any)
+    const entries = ownTag
+      ? all.filter((e) => e.allTags.some((t) => t.toLowerCase() === ownTag))
+      : all
     const groups = [{ label: "文献列表", anchor: "tag", items: entries }]
     return h(
       "div",
       { class: "lit-page lit-tag-page" },
       h("div", {
         class: "lit-tag-context",
-        "data-tag": slug === "tags" ? "" : slug.split("/").slice(1).join("/"),
+        "data-tag": ownTag,
       }),
       renderIndexSection(slug, groups, []),
       h("div", { class: "lit-summary" }, `共 ${entries.length} 篇文献 · 构建时自动生成`),
@@ -848,12 +892,17 @@ const LiteratureIndexPage: QuartzPageTypePlugin = () => ({
   body: LiteratureBody,
   // All tag pages (virtual or content) belong to us now — TagPage is disabled.
   generate: ({ content }) => {
-    // collect every tag from published files (all namespaces)
+    // collect every PUBLIC tag from published files (all namespaces).
+    // PUBLIC_TAG_RE guards against parsing junk that OFM injects into
+    // frontmatter from note bodies (a literal "#" → empty tag → ghost
+    // page tags/, "dot #1-#8" → tag 1-8) and bare un-namespaced tags.
     const tagSet = new Set<string>()
     for (const [, file] of content) {
       const fm = (file.data?.frontmatter ?? {}) as Fm
-      const tags: string[] = fm.tags ?? []
-      for (const t of tags) tagSet.add(`tags/${t}`)
+      const tags: unknown[] = Array.isArray(fm.tags) ? fm.tags : []
+      for (const t of tags) {
+        if (typeof t === "string" && PUBLIC_TAG_RE.test(t)) tagSet.add(`tags/${t}`)
+      }
     }
     tagSet.add("tags/index") // the tag index page
     // avoid duplicates with real content files
@@ -864,7 +913,7 @@ const LiteratureIndexPage: QuartzPageTypePlugin = () => ({
     }
     const virtualPages: { slug: string; title: string; data: Record<string, unknown> }[] = []
     for (const slug of tagSet) {
-      if (existing.has(slug) || slug === "tags") continue
+      if (slug !== "tags/index" && (existing.has(slug) || !isLitTagSlug(slug))) continue
       virtualPages.push({ slug, title: slug.split("/").slice(1).join("/"), data: {} })
     }
     return virtualPages
@@ -873,6 +922,10 @@ const LiteratureIndexPage: QuartzPageTypePlugin = () => ({
     // public pages: drop reading-status tag links everywhere
     (root, slug, componentData) => {
       stripPrivateSections(root)
+      // body-text tokens misparsed as tags ("dot #1-#8" → tag "1-8", a
+      // literal "#" → empty tag) render as tag links to ghost pages —
+      // turn them back into plain text
+      stripJunkTagLinks(root)
       // keep private status/* tags out of rendered tag lists / properties view
       const fm = componentData?.fileData?.frontmatter as Fm | undefined
       if (fm && Array.isArray(fm.tags)) {

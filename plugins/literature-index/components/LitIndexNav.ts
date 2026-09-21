@@ -72,7 +72,7 @@ const LitIndexNavComponent: QuartzComponent = (props: QuartzComponentProps) => {
       h("div", { class: "lit-leftnav-title" }, "浏览"),
       link("📚 文献索引", `${PREFIX}/index`),
       link("🏷️ 主题标签", "tags/index"),
-      link("🗂️ 文件夹", "tags/topic/index"),
+      link("🗂️ 文献目录", `${PREFIX}/02-literature-moc`),
     )
   }
 

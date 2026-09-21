@@ -21,6 +21,8 @@ export interface LitFilterState {
   tagList: string[]
   source: "all" | "paper" | "clip"
   sort: string
+  /** tag pages: the page's own tag, baked into the SSR list — never a filter */
+  lockedTag?: string
 }
 
 export const DEFAULT_SORT = "added-desc"
@@ -63,10 +65,15 @@ window.LitFilter = (function () {
   function create(dom, initial) {
     var state = {
       query: initial.query || "",
-      tagList: (initial.tagList || []).slice(),
+      tagList: (initial.tagList || []).filter(function (t) {
+        return !initial.lockedTag || t.toLowerCase() !== String(initial.lockedTag).toLowerCase()
+      }),
       source: initial.source || "all",
       sort: initial.sort || DEFAULT_SORT,
     }
+    // On tag pages the page's own tag is baked into the SSR'd card list; it is
+    // locked context, never a client-side filter, so the URL stays clean.
+    var lockedTag = initial.lockedTag || ""
     var suppressSync = false
 
     function fmtDate(ts) {
@@ -166,8 +173,6 @@ window.LitFilter = (function () {
       }
 
       if (dom.countEl) dom.countEl.textContent = String(visible.length)
-      renderChips()
-      renderPillHighlights()
     }
 
     function renderChips() {
@@ -199,7 +204,7 @@ window.LitFilter = (function () {
     }
 
     function toggleTag(tag) {
-      if (!tag) return
+      if (!tag || tag.toLowerCase() === lockedTag.toLowerCase()) return
       var i = state.tagList.indexOf(tag)
       if (i >= 0) state.tagList.splice(i, 1)
       else state.tagList.push(tag)
@@ -214,6 +219,7 @@ window.LitFilter = (function () {
     }
 
     // -- events ---------------------------------------------------------------
+    // clicking a pill whose tag equals the locked own-tag is a no-op there
     dom.root.addEventListener("change", function (e) {
       var t = e.target
       if (t.matches("[data-sort-select]")) setState({ sort: t.value })
@@ -242,6 +248,13 @@ window.LitFilter = (function () {
     })
     window.addEventListener("popstate", function () {
       var next = stateFromSearch(location.search)
+      if (lockedTag) {
+        // the own-tag never lives in the URL; ignore stale ?tag= it from
+        // older shared links so back/forward always keeps the page's context
+        next.tagList = next.tagList.filter(function (t) {
+          return t.toLowerCase() !== lockedTag.toLowerCase()
+        })
+      }
       if (sameState(state, next)) return
       suppressSync = true
       state = next

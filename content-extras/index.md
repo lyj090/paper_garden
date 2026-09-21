@@ -18,7 +18,7 @@ description: 论文阅读笔记 · 按研究分区索引
   <div class="home-card-arrow">→</div>
 </a>
 
-<a class="home-card" href="./tags/">
+<a class="home-card" href="./tags/index">
   <div class="home-card-icon">🏷️</div>
   <div class="home-card-body">
     <div class="home-card-title">主题标签</div>
@@ -27,7 +27,7 @@ description: 论文阅读笔记 · 按研究分区索引
   <div class="home-card-arrow">→</div>
 </a>
 
-<a class="home-card" href="./tags/topic/">
+<a class="home-card" href="./02-literature/02-literature-moc">
   <div class="home-card-icon">🗂️</div>
   <div class="home-card-body">
     <div class="home-card-title">文件夹浏览</div>

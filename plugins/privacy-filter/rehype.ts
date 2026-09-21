@@ -31,6 +31,15 @@ const PRIVATE_TEXT_PATTERNS = [
 const PRIVATE_TAG_PREFIXES = ["status/", "rel/", "proj/", "source/"]
 const PRIVATE_TAG_NAMES = new Set(["type/paper"])
 
+/**
+ * A tag worth showing publicly: at least one namespace segment, every
+ * segment slug-safe. Filters out parsing junk that Obsidian-flavored
+ * markdown injects into frontmatter from note BODIES — e.g. a literal "#"
+ * becomes tag "" (→ ghost page tags/), "dot #1-#8" becomes "1-8" — and
+ * bare un-namespaced tags that have no tag page on this site.
+ */
+export const PUBLIC_TAG_RE = /^[a-z0-9][a-z0-9_-]*(\/[a-z0-9][a-z0-9_-]*)+$/
+
 export function isPrivateTag(tag: string): boolean {
   return PRIVATE_TAG_NAMES.has(tag) || PRIVATE_TAG_PREFIXES.some((p) => tag.startsWith(p))
 }
@@ -38,7 +47,7 @@ export function isPrivateTag(tag: string): boolean {
 function filterTags(tags: unknown): string[] | null {
   if (!Array.isArray(tags)) return null
   const kept = (tags as unknown[]).filter(
-    (t) => typeof t === "string" && !isPrivateTag(t),
+    (t) => typeof t === "string" && !isPrivateTag(t) && PUBLIC_TAG_RE.test(t),
   ) as string[]
   return kept
 }

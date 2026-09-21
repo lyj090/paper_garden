@@ -104,6 +104,27 @@ interface Group {
   items: Entry[]
 }
 
+interface TopicNav {
+  slug: string
+  label: string
+  count: number
+}
+
+/** Most-used topic/method tags for the side-nav "常用主题" section. */
+function buildTopicNav(entries: Entry[], max = 8): TopicNav[] {
+  const counts = new Map<string, number>()
+  for (const e of entries) {
+    for (const t of e.topics) {
+      counts.set(t, (counts.get(t) ?? 0) + 1)
+    }
+  }
+  return [...counts.entries()]
+    .filter(([, n]) => n >= 3)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max)
+    .map(([slug, count]) => ({ slug, label: slug.split("/")[1] ?? slug, count }))
+}
+
 function groupByArea(entries: Entry[]): Group[] {
   const byArea = new Map<string, Entry[]>()
   for (const e of entries) {
@@ -138,24 +159,54 @@ function groupByArea(entries: Entry[]): Group[] {
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
-function renderIndexSection(slug: string, groups: Group[]) {
+function renderIndexSection(slug: string, groups: Group[], topicNav: TopicNav[]) {
   return h(
     "div",
     { class: "lit-index" },
-    // area quick-nav
-    groups.length > 1 &&
-      h(
-        "nav",
-        { class: "lit-nav" },
-        groups.map((g) =>
-          h(
-            "a",
-            { href: `#${g.anchor}`, class: "lit-nav-link" },
-            g.label,
-            h("span", { class: "lit-nav-count" }, String(g.items.length)),
-          ),
+    // floating side nav (desktop): area + topic filter anchors
+    h(
+      "aside",
+      { class: "lit-sidenav", "aria-label": "文献分区导航" },
+      h("div", { class: "lit-sidenav-title" }, "分区"),
+      groups.map((g) =>
+        h(
+          "a",
+          { href: `#${g.anchor}`, class: "lit-sidenav-link" },
+          h("span", { class: "lit-sidenav-label" }, g.label),
+          h("span", { class: "lit-sidenav-count" }, String(g.items.length)),
         ),
       ),
+      topicNav.length > 0 &&
+        h(
+          "div",
+          { class: "lit-sidenav-section" },
+          h("div", { class: "lit-sidenav-title" }, "常用主题"),
+          topicNav.map((t) =>
+            h(
+              "a",
+              {
+                href: resolveRelative(slug, `tags/${t.slug}`),
+                class: "lit-sidenav-link lit-sidenav-topic",
+              },
+              h("span", { class: "lit-sidenav-label" }, t.label),
+              h("span", { class: "lit-sidenav-count" }, String(t.count)),
+            ),
+          ),
+        ),
+    ),
+    // mobile horizontal scroller
+    h(
+      "nav",
+      { class: "lit-nav" },
+      groups.map((g) =>
+        h(
+          "a",
+          { href: `#${g.anchor}`, class: "lit-nav-link" },
+          g.label,
+          h("span", { class: "lit-nav-count" }, String(g.items.length)),
+        ),
+      ),
+    ),
     groups.map((g) =>
       h(
         "section",
@@ -199,13 +250,17 @@ function renderIndexSection(slug: string, groups: Group[]) {
                   h(
                     "div",
                     { class: "lit-card-tags" },
-                    e.topics.map((t) =>
-                      h(
+                    e.topics.map((t) => {
+                      const ns = t.split("/")[0]
+                      return h(
                         "a",
-                        { class: "lit-tag", href: resolveRelative(slug, `tags/${t}`) },
+                        {
+                          class: `lit-tag lit-tag-${ns}`,
+                          href: resolveRelative(slug, `tags/${t}`),
+                        },
                         t.split("/")[1] ?? t,
-                      ),
-                    ),
+                      )
+                    }),
                   ),
               ),
             ),
@@ -389,7 +444,7 @@ const renderBody = (props: QuartzComponentProps) => {
     "div",
     { class: "lit-page" },
     original,
-    renderIndexSection(slug, groups),
+    renderIndexSection(slug, groups, buildTopicNav(entries)),
     h("div", { class: "lit-summary" }, `共 ${entries.length} 篇文献 · 构建时自动生成`),
   )
 }
@@ -471,7 +526,7 @@ const css = `
 }
 .lit-index .lit-year { font-variant-numeric: tabular-nums; }
 
-/* topic tag pills */
+/* topic tag pills — colored by namespace for scannability */
 .lit-index .lit-card-tags {
   display: flex; flex-wrap: wrap; gap: 0.35rem;
 }
@@ -487,15 +542,34 @@ const css = `
   color: var(--secondary);
   background: color-mix(in srgb, var(--secondary) 16%, transparent);
 }
-
-/* ---- area quick-nav ---- */
-.lit-nav {
-  display: flex; flex-wrap: wrap; gap: 0.5rem;
-  margin-block: 1rem 1.5rem;
+/* method/* pills get a distinct warm tint */
+.lit-index .lit-tag-method {
+  background: color-mix(in srgb, #b8860b 10%, transparent);
+  color: color-mix(in srgb, #b8860b 70%, var(--darkgray));
 }
+.lit-index .lit-tag-method:hover {
+  background: color-mix(in srgb, #b8860b 18%, transparent);
+  color: color-mix(in srgb, #b8860b 85%, var(--dark));
+}
+:root[saved-theme="dark"] .lit-index .lit-tag-method,
+:root.dark .lit-index .lit-tag-method {
+  background: color-mix(in srgb, #d4a72c 14%, transparent);
+  color: color-mix(in srgb, #d4a72c 75%, var(--darkgray));
+}
+
+/* ---- mobile horizontal quick-nav ---- */
+.lit-nav {
+  display: flex; flex-wrap: nowrap; gap: 0.5rem;
+  margin-block: 1rem 1.5rem;
+  overflow-x: auto; padding-bottom: 0.3rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.lit-nav::-webkit-scrollbar { display: none; }
 .lit-nav-link {
   font-size: 0.82rem;
   display: inline-flex; align-items: center; gap: 0.4rem;
+  white-space: nowrap;
   border: 1px solid var(--lightgray);
   border-radius: 999px;
   padding: 0.25rem 0.85rem;
@@ -509,6 +583,65 @@ const css = `
 .lit-nav-count {
   font-size: 0.85em; color: var(--gray);
   font-variant-numeric: tabular-nums;
+}
+
+/* ---- floating side nav (desktop only) ---- */
+.lit-sidenav {
+  display: none;
+}
+@media all and (min-width: 1200px) {
+  .lit-nav { display: none; }
+  .lit-sidenav {
+    display: flex; flex-direction: column; gap: 0.15rem;
+    position: sticky;
+    bottom: 6rem;
+    float: right;
+    margin-left: 1.25rem;
+    margin-bottom: 1rem;
+    max-width: 11.5rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--lightgray);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--light) 92%, transparent);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    z-index: 10;
+    max-height: 70vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .lit-sidenav-title {
+    font-size: 0.68rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray);
+    margin-block: 0.35rem 0.25rem;
+  }
+  .lit-sidenav-title:first-child { margin-top: 0; }
+  .lit-sidenav-section {
+    border-top: 1px solid var(--lightgray);
+    margin-top: 0.45rem; padding-top: 0.3rem;
+  }
+  .lit-sidenav-link {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.6rem;
+    font-size: 0.78rem;
+    padding: 0.18rem 0.4rem;
+    border-radius: 6px;
+    color: var(--darkgray);
+  }
+  .lit-sidenav-link:hover {
+    background: color-mix(in srgb, var(--secondary) 8%, transparent);
+    color: var(--secondary);
+  }
+  .lit-sidenav-count {
+    font-size: 0.72rem; color: var(--gray);
+    font-variant-numeric: tabular-nums;
+  }
+  .lit-sidenav-topic .lit-sidenav-label::before {
+    content: "#"; opacity: 0.5; margin-right: 0.1rem;
+  }
+  /* keep sections clear of the floating nav on wide screens */
+  .lit-group { scroll-margin-top: 1.5rem; }
 }
 
 /* summary footer */

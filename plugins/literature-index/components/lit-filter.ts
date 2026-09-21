@@ -1,5 +1,5 @@
 /**
- * LitFilter — the single source of truth for client-side filtering / sorting
+ * LitFilter — the single source of truth for client-side search / sorting
  * of the literature cards.
  *
  * Two faces:
@@ -9,20 +9,16 @@
  *  2. create(...) (TS): the same controller behind that script, used by the
  *     bootstrap string in index.ts.
  *
- * Features (browser side):
- *  - URL state sync (?q=&tag=&src=&sort=) → shareable, bookmarkable
- *  - popstate handling → browser back/forward restores filters without reload
- *  - stacked AND tag filters with chip UI and pill highlighting
- *  - grouped default view vs flat sorted view
+ * Design: one tag = one page = one list. Tag filtering happens at build time
+ * (each tag page SSRs only its own papers); this controller only handles
+ * text search and sort order — the two dimensions that cannot be
+ * precomputed. Its URL contract is ?q=&sort=, so any view is shareable and
+ * browser back/forward restores it without a reload.
  */
 
 export interface LitFilterState {
   query: string
-  tagList: string[]
-  source: "all" | "paper" | "clip"
   sort: string
-  /** tag pages: the page's own tag, baked into the SSR list — never a filter */
-  lockedTag?: string
 }
 
 export const DEFAULT_SORT = "added-desc"
@@ -38,42 +34,28 @@ window.LitFilter = (function () {
   function stateToParams(s) {
     var p = new URLSearchParams()
     if (s.query) p.set("q", s.query)
-    if (s.tagList.length > 0) p.set("tag", s.tagList.join(","))
-    if (s.source !== "all") p.set("src", s.source)
     if (s.sort !== DEFAULT_SORT) p.set("sort", s.sort)
     return p
   }
 
   function stateFromSearch(search) {
     var p = new URLSearchParams(search)
-    var src = p.get("src")
     var sort = p.get("sort")
     return {
       query: p.get("q") || "",
-      tagList: p.get("tag") ? p.get("tag").split(",").filter(Boolean) : [],
-      source: src === "paper" || src === "clip" ? src : "all",
       sort: sort ? sort : DEFAULT_SORT,
     }
   }
 
   function sameState(a, b) {
-    return a.query === b.query && a.source === b.source && a.sort === b.sort &&
-      a.tagList.length === b.tagList.length &&
-      a.tagList.every(function (t, i) { return t === b.tagList[i] })
+    return a.query === b.query && a.sort === b.sort
   }
 
   function create(dom, initial) {
     var state = {
       query: initial.query || "",
-      tagList: (initial.tagList || []).filter(function (t) {
-        return !initial.lockedTag || t.toLowerCase() !== String(initial.lockedTag).toLowerCase()
-      }),
-      source: initial.source || "all",
       sort: initial.sort || DEFAULT_SORT,
     }
-    // On tag pages the page's own tag is baked into the SSR'd card list; it is
-    // locked context, never a client-side filter, so the URL stays clean.
-    var lockedTag = initial.lockedTag || ""
     var suppressSync = false
 
     function fmtDate(ts) {
@@ -92,33 +74,17 @@ window.LitFilter = (function () {
     }
 
     function isDefaultView() {
-      return state.sort === DEFAULT_SORT && state.source === "all" &&
-        !state.query && state.tagList.length === 0
+      return state.sort === DEFAULT_SORT && !state.query
     }
 
     function apply() {
-      renderChips()
-      renderPillHighlights()
-
-      var activeTags = state.tagList.map(function (t) { return t.toLowerCase() })
       var q = state.query.toLowerCase()
       var visible = dom.cards.filter(function (item) {
+        if (!q) return true
         var card = item.querySelector(".lit-card")
         if (!card) return false
-        var src = card.getAttribute("data-source")
-        if (state.source === "paper" && src !== "paper") return false
-        if (state.source === "clip" && src !== "clip") return false
-        if (activeTags.length > 0) {
-          var tags = (card.getAttribute("data-tags") || "").toLowerCase().split("|")
-          for (var i = 0; i < activeTags.length; i++) {
-            if (tags.indexOf(activeTags[i]) === -1) return false
-          }
-        }
-        if (q) {
-          var hay = (card.getAttribute("data-search") || "").toLowerCase()
-          if (hay.indexOf(q) === -1) return false
-        }
-        return true
+        var hay = (card.getAttribute("data-search") || "").toLowerCase()
+        return hay.indexOf(q) !== -1
       })
 
       var cmp = {
@@ -175,43 +141,6 @@ window.LitFilter = (function () {
       if (dom.countEl) dom.countEl.textContent = String(visible.length)
     }
 
-    function renderChips() {
-      dom.chipBar.innerHTML = ""
-      dom.chipBar.classList.toggle("lit-has-chips", state.tagList.length > 0)
-      state.tagList.forEach(function (tag) {
-        var chip = document.createElement("span")
-        chip.className = "lit-chip"
-        chip.textContent = tag
-        var x = document.createElement("button")
-        x.type = "button"
-        x.className = "lit-chip-x"
-        x.setAttribute("data-tag-remove", tag)
-        x.setAttribute("aria-label", "移除筛选 " + tag)
-        x.textContent = "×"
-        chip.appendChild(x)
-        dom.chipBar.appendChild(chip)
-      })
-    }
-
-    function renderPillHighlights() {
-      var active = state.tagList.map(function (t) { return t.toLowerCase() })
-      dom.cards.forEach(function (item) {
-        item.querySelectorAll("a.lit-tag").forEach(function (p) {
-          var t = (p.getAttribute("data-tag") || "").toLowerCase()
-          p.classList.toggle("lit-tag-active", active.indexOf(t) >= 0)
-        })
-      })
-    }
-
-    function toggleTag(tag) {
-      if (!tag || tag.toLowerCase() === lockedTag.toLowerCase()) return
-      var i = state.tagList.indexOf(tag)
-      if (i >= 0) state.tagList.splice(i, 1)
-      else state.tagList.push(tag)
-      apply()
-      syncUrl(true)
-    }
-
     function setState(next) {
       Object.assign(state, next)
       apply()
@@ -219,48 +148,25 @@ window.LitFilter = (function () {
     }
 
     // -- events ---------------------------------------------------------------
-    // clicking a pill whose tag equals the locked own-tag is a no-op there
     dom.root.addEventListener("change", function (e) {
       var t = e.target
-      if (t.matches("[data-sort-select]")) setState({ sort: t.value })
-      else if (t.matches("[data-source-select]")) setState({ source: t.value })
+      if (t.matches && t.matches("[data-sort-select]")) setState({ sort: t.value })
     })
     dom.root.addEventListener("input", function (e) {
       var t = e.target
-      if (t.matches("[data-search-input]")) {
+      if (t.matches && t.matches("[data-search-input]")) {
         state.query = t.value.trim()
         apply()
         syncUrl(false) // typing replaces, never pushes
       }
     })
-    dom.root.addEventListener("click", function (e) {
-      var t = e.target
-      var pill = t.closest ? t.closest("a.lit-tag[data-tag]") : null
-      if (pill) {
-        e.preventDefault()
-        toggleTag(pill.getAttribute("data-tag"))
-        return
-      }
-      if (t.matches("[data-tag-remove]")) {
-        e.preventDefault()
-        toggleTag(t.getAttribute("data-tag-remove"))
-      }
-    })
     window.addEventListener("popstate", function () {
       var next = stateFromSearch(location.search)
-      if (lockedTag) {
-        // the own-tag never lives in the URL; ignore stale ?tag= it from
-        // older shared links so back/forward always keeps the page's context
-        next.tagList = next.tagList.filter(function (t) {
-          return t.toLowerCase() !== lockedTag.toLowerCase()
-        })
-      }
       if (sameState(state, next)) return
       suppressSync = true
       state = next
       if (dom.searchInput) dom.searchInput.value = state.query
       if (dom.sortSelect) dom.sortSelect.value = state.sort
-      if (dom.sourceSelect) dom.sourceSelect.value = state.source
       apply()
       suppressSync = false
     })
@@ -268,7 +174,7 @@ window.LitFilter = (function () {
     apply()
     syncUrl(false)
 
-    return { toggleTag: toggleTag, setState: setState, apply: apply }
+    return { setState: setState, apply: apply }
   }
 
   return { create: create, stateFromSearch: stateFromSearch }
@@ -283,20 +189,15 @@ export interface LitFilterDom {
   flat: HTMLElement
   groups: HTMLElement[]
   groupOf: Map<HTMLElement, string>
-  chipBar: HTMLElement
   countEl: HTMLElement | null
   searchInput: HTMLInputElement | null
   sortSelect: HTMLSelectElement | null
-  sourceSelect: HTMLSelectElement | null
 }
 
 export function stateFromSearch(search: string): LitFilterState {
   const p = new URLSearchParams(search)
-  const src = p.get("src")
   return {
     query: p.get("q") ?? "",
-    tagList: p.get("tag") ? p.get("tag")!.split(",").filter(Boolean) : [],
-    source: src === "paper" || src === "clip" ? src : "all",
     sort: p.get("sort") || DEFAULT_SORT,
   }
 }

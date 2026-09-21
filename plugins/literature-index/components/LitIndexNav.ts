@@ -57,22 +57,17 @@ const LitIndexNavComponent: QuartzComponent = (props: QuartzComponentProps) => {
 
   const slug = fileData.slug
 
-  // --- homepage: compact browse menu --------------------------------------
+  // --- homepage: single entry ----------------------------------------------
   if (slug === "index") {
-    const link = (label: string, target: string, desc?: string) =>
-      h(
-        "a",
-        { href: resolveRelative(slug, target), class: "lit-leftnav-link" },
-        h("span", { class: "lit-leftnav-label" }, label),
-        desc ? h("span", { class: "lit-leftnav-desc" }, desc) : null,
-      )
     return h(
       "div",
       { class: "lit-leftnav" },
       h("div", { class: "lit-leftnav-title" }, "浏览"),
-      link("📚 文献索引", `${PREFIX}/index`),
-      link("🏷️ 主题标签", "tags/index"),
-      link("🗂️ 文献目录", `${PREFIX}/02-literature-moc`),
+      h(
+        "a",
+        { href: resolveRelative(slug, `${PREFIX}/index`), class: "lit-leftnav-link" },
+        h("span", { class: "lit-leftnav-label" }, "📚 文献索引"),
+      ),
     )
   }
 
@@ -89,7 +84,7 @@ const LitIndexNavComponent: QuartzComponent = (props: QuartzComponentProps) => {
     })
   }
 
-  // area groups
+  // area groups — links jump to the index page's per-area sections
   const byArea = new Map<string, number>()
   for (const e of entries) {
     const areas = e.areas.length > 0 ? e.areas : ["other"]
@@ -100,45 +95,29 @@ const LitIndexNavComponent: QuartzComponent = (props: QuartzComponentProps) => {
     if (!AREA_ORDER.includes(a) && a !== "other" && !areaLinks.includes(a)) areaLinks.push(a)
   }
 
-  // top topics
-  const topicCounts = new Map<string, number>()
-  for (const e of entries) {
-    for (const t of new Set(e.topics)) topicCounts.set(t, (topicCounts.get(t) ?? 0) + 1)
-  }
-  const topTopics = [...topicCounts.entries()]
-    .filter(([, n]) => n >= 3)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-
   // --- literature pages (incl. tag pages): full nav; others: shortcut -----
   const inLit = slug.startsWith(`${PREFIX}/`) || slug.startsWith("tags/")
+  const indexSlug = `${PREFIX}/index`
   const areaEls = areaLinks.map((a) =>
     h(
       "a",
       {
-        href: resolveRelative(slug, `${PREFIX}/index`) + `#${a}`,
+        href: resolveRelative(slug, indexSlug) + `#${a}`,
         class: "lit-leftnav-link",
       },
       h("span", { class: "lit-leftnav-label" }, AREA_LABELS[a] ?? a),
       h("span", { class: "lit-leftnav-count" }, String(byArea.get(a) ?? 0)),
     ),
   )
-  const topicEls = topTopics.map(([t, n]) =>
-    h(
-      "a",
-      { href: resolveRelative(slug, `tags/${t}`), class: "lit-leftnav-link lit-leftnav-topic" },
-      h("span", { class: "lit-leftnav-label" }, t.split("/")[1] ?? t),
-      h("span", { class: "lit-leftnav-count" }, String(n)),
-    ),
-  )
 
   if (inLit) {
-    // full tag cloud with counts — data-tag attrs let the filter controller
-    // turn these into client-side toggles on any lit page
+    // tag cloud with counts — plain links: one tag = one page, the current
+    // page's own tag is highlighted (SSR'd, no client-side state needed)
     const allTagCounts = new Map<string, number>()
     for (const e of entries) {
       for (const t of new Set(e.topics)) allTagCounts.set(t, (allTagCounts.get(t) ?? 0) + 1)
     }
+    const ownTag = slug.startsWith("tags/") ? slug.split("/").slice(1).join("/") : ""
     const allTagEls = [...allTagCounts.entries()]
       .sort((a, b) => b[1] - a[1])
       .map(([t, n]) =>
@@ -146,8 +125,9 @@ const LitIndexNavComponent: QuartzComponent = (props: QuartzComponentProps) => {
           "a",
           {
             href: resolveRelative(slug, `tags/${t}`),
-            class: "lit-leftnav-link lit-leftnav-topic",
-            "data-tag": t,
+            class:
+              "lit-leftnav-link lit-leftnav-topic" +
+              (t === ownTag ? " lit-tag-active" : ""),
           },
           h("span", { class: "lit-leftnav-label" }, t.split("/")[1] ?? t),
           h("span", { class: "lit-leftnav-count" }, String(n)),

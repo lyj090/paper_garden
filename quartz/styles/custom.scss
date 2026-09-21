@@ -1,3 +1,64 @@
 @use "./variables.scss" as *;
 
-// put your custom CSS here!
+// Things-inspired reading surface: narrow measure, generous rhythm, and a
+// neutral palette supplied by quartz.config.yaml.
+.center > article {
+  width: min(100%, 46rem);
+  margin-inline: auto;
+}
+
+.center > article p,
+.center > article li {
+  line-height: 1.78;
+}
+
+.center > article p {
+  margin-block: 1.1rem;
+}
+
+.center > article h1,
+.center > article h2,
+.center > article h3,
+.center > article h4,
+.center > article h5,
+.center > article h6 {
+  font-weight: 600;
+}
+
+.center > article h1 {
+  margin-top: 2.8rem;
+  margin-bottom: 1.35rem;
+}
+
+.center > article h2 {
+  margin-top: 2.35rem;
+  margin-bottom: 1.1rem;
+}
+
+.center > article h3,
+.center > article h4,
+.center > article h5,
+.center > article h6 {
+  margin-top: 1.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.center > article blockquote {
+  margin-block: 1.5rem;
+  padding-block: 0.2rem;
+  color: var(--darkgray);
+}
+
+.center > article .table-container {
+  margin-block: 1.5rem;
+}
+
+.center > article .table-container > table {
+  margin-inline: 0;
+}
+
+@media all and ($mobile) {
+  .center > article {
+    width: 100%;
+  }
+}

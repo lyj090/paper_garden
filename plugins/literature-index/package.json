@@ -1,0 +1,17 @@
+{
+  "name": "literature-index",
+  "version": "1.0.0",
+  "description": "Build-time literature index pages for Quartz (replaces Dataview-backed MOC tables on the published site)",
+  "type": "module",
+  "quartz": {
+    "name": "literature-index",
+    "displayName": "Literature Index",
+    "description": "Auto literature indexes grouped by status tags",
+    "version": "1.0.0",
+    "category": "pageType",
+    "defaultOrder": 40
+  },
+  "exports": {
+    ".": "./index.ts"
+  }
+}

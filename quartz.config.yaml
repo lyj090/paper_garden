@@ -37,29 +37,29 @@ configuration:
     cdnCaching: true
     typography:
       header: Schibsted Grotesk
-      body: Source Sans Pro
+      body: Source Serif 4
       code: IBM Plex Mono
     colors:
       lightMode:
-        light: "#faf8f8"
-        lightgray: "#e5e5e5"
-        gray: "#b8b8b8"
-        darkgray: "#4e4e4e"
-        dark: "#2b2b2b"
-        secondary: "#284b63"
-        tertiary: "#84a59d"
-        highlight: rgba(143, 159, 169, 0.15)
-        textHighlight: "#fff23688"
+        light: "#f7f7f5"
+        lightgray: "#e7e7e3"
+        gray: "#a8a8a2"
+        darkgray: "#4b4b48"
+        dark: "#242423"
+        secondary: "#3f3f3d"
+        tertiary: "#70706b"
+        highlight: rgba(0, 0, 0, 0.055)
+        textHighlight: "#d9d9cf88"
       darkMode:
-        light: "#161618"
-        lightgray: "#393639"
-        gray: "#646464"
-        darkgray: "#d4d4d4"
-        dark: "#ebebec"
-        secondary: "#7b97aa"
-        tertiary: "#84a59d"
-        highlight: rgba(143, 159, 169, 0.15)
-        textHighlight: "#b3aa0288"
+        light: "#1b1b1a"
+        lightgray: "#30302e"
+        gray: "#777772"
+        darkgray: "#c9c9c3"
+        dark: "#eeeeea"
+        secondary: "#d1d1ca"
+        tertiary: "#a3a39d"
+        highlight: rgba(255, 255, 255, 0.075)
+        textHighlight: "#68685f88"
 plugins:
   - source: github:quartz-community/created-modified-date
     enabled: true
@@ -281,9 +281,14 @@ plugins:
       name: quartz-themes
       repo: github:saberzero1/quartz-themes
       subdir: plugin
-    enabled: true
+    # Disabled: injects an Obsidian theme (one-dark-pro) that overrides the
+    # custom reading palette defined in `theme.colors` / custom.scss above.
+    enabled: false
     options:
       theme: one-dark-pro
+  - source: ./plugins/literature-index
+    enabled: true
+    order: 15
   - source: github:quartz-community/obsidian-plugin-excalidraw
     enabled: true
     options:

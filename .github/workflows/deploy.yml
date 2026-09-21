@@ -38,6 +38,10 @@ jobs:
           git clone --depth 1 \
             https://x-access-token:${{ secrets.OBSIDIAN_PAT }}@github.com/lyj090/Obsidian.git content
 
+      # ── 叠加站点专属内容（如 02-Literature/index.md 索引入口）──
+      - name: Overlay site-specific content
+        run: cp -r content-extras/. content/
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:

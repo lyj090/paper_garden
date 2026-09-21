@@ -162,7 +162,11 @@ body[data-slug="index"] details.note-properties,
 body[data-slug^="tags"] details.note-properties,
 body[data-slug^="02-literature"] details.note-properties,
 body[data-slug="index"] .content-meta,
-body[data-slug="index"] ul.tags {
+body[data-slug^="tags"] .content-meta,
+body[data-slug^="02-literature"] .content-meta,
+body[data-slug="index"] ul.tags,
+body[data-slug^="tags"] ul.tags,
+body[data-slug^="02-literature"] ul.tags {
   display: none;
 }
 
@@ -189,53 +193,3 @@ body[data-slug="index"] .graph {
 }
 
 // ---------------------------------------------------------------------------
-// Homepage: single entry card → literature index
-// ---------------------------------------------------------------------------
-.home-entry {
-  margin-block: 1.4rem 2rem;
-}
-
-.home-entry-card {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.95rem 1.25rem;
-  border: 1px solid var(--lightgray);
-  border-radius: 10px;
-  background: var(--light);
-  text-decoration: none;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.15s ease;
-
-  &:hover {
-    border-color: var(--secondary);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
-    transform: translateY(-1px);
-
-    .home-entry-arrow {
-      transform: translateX(2px);
-      opacity: 1;
-    }
-  }
-
-  .home-entry-icon {
-    font-size: 1.35rem;
-    line-height: 1;
-  }
-
-  .home-entry-text {
-    font-weight: 600;
-    font-size: 0.98rem;
-    color: var(--dark);
-  }
-
-  .home-entry-arrow {
-    color: var(--gray);
-    opacity: 0.6;
-    transition:
-      transform 0.15s ease,
-      opacity 0.15s ease;
-  }
-}

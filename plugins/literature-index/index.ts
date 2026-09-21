@@ -557,9 +557,10 @@ const renderBody = (props: QuartzComponentProps) => {
     // matching entries (no client-side re-filtering, no chips, no stacking) —
     // the URL, the title and the list always agree. Tag pills on cards and
     // the sidebar tag cloud navigate to other tag pages.
-    const ownTag = slug === "tags" || slug === "tags/index"
-      ? ""
-      : slug.split("/").slice(1).join("/")
+    // The site root (slug "index") renders the same all-tags view, so the
+    // tag index IS the landing page.
+    const isTagIndex = TAG_INDEX_SLUGS.has(slug)
+    const ownTag = isTagIndex ? "" : slug.split("/").slice(1).join("/")
     const all = collectEntries(props.allFiles as any)
     const entries = ownTag
       ? all.filter((e) => e.allTags.some((t) => t.toLowerCase() === ownTag))
@@ -574,10 +575,11 @@ const renderBody = (props: QuartzComponentProps) => {
         class: "lit-tag-context",
         "data-tag": ownTag,
       }),
-      renderIndexSection(slug, groups, [], ownTag)
+      renderIndexSection(slug, groups, [], ownTag),
     )
   }
 
+  // 02-literature index: area-grouped view of the same entries
   const entries = collectEntries(props.allFiles as any)
   const groups = groupByArea(entries)
 
@@ -823,10 +825,17 @@ const css = `
 
 const LIT_SLUGS = new Set([`${PREFIX}/index`, `${PREFIX}/02-literature-moc`])
 
+/**
+ * Slugs that render the tag-index body (the site's landing view).
+ * `index` is the site root — the tag index IS the homepage — and
+ * `tags/index` is the same page under its /tags/ URL.
+ */
+const TAG_INDEX_SLUGS = new Set(["index", "tags/index"])
+
 /** Tag namespaces we take over from the generic TagPage. */
 const TAGGED_NS = ["topic", "method", "area", "task", "hardware", "software", "type", "source"]
 const isLitTagSlug = (slug: string): boolean => {
-  if (slug === "tags" || slug === "tags/index") return true
+  if (TAG_INDEX_SLUGS.has(slug)) return true
   if (!slug.startsWith("tags/")) return false
   const ns = slug.split("/")[1]
   return TAGGED_NS.includes(ns)
@@ -866,7 +875,8 @@ const LiteratureIndexPage: QuartzPageTypePlugin = () => ({
       const raw = slug.split("/").slice(1).join("/")
       // ns/<tag> slugs render as "ns/tag" in H1/breadcrumbs — show just the
       // tag segment for a friendlier title (namespaces are an internal detail)
-      const title = raw.includes("/") ? raw.split("/").slice(1).join("/") : raw
+      const title =
+        slug === "tags/index" ? "主题标签" : raw.includes("/") ? raw.split("/").slice(1).join("/") : raw
       virtualPages.push({ slug, title, data: {} })
     }
     return virtualPages

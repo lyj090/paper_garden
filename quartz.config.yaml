@@ -175,7 +175,9 @@ plugins:
   - source: github:quartz-community/folder-page
     enabled: true
   - source: github:quartz-community/tag-page
-    enabled: true
+    # Disabled: literature-index plugin takes over all tag pages with the
+    # unified card list + search/filter/sort toolbar.
+    enabled: false
   - source: github:quartz-community/explorer
     enabled: true
     layout:

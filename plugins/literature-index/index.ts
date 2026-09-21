@@ -31,6 +31,8 @@ interface Entry {
   date: Date | null
   /** paper = ZoteroNotes (formal papers), clip = WebNotes (web excerpts) */
   source: "paper" | "clip"
+  /** all public tag slugs, for client-side tag filtering */
+  allTags: string[]
 }
 
 const PREFIX = "02-literature"
@@ -79,6 +81,17 @@ function makeEntry(slug: string, fm: Fm): Entry {
     areas: tags.filter((t) => t.startsWith("area/")).map((t) => t.slice("area/".length)),
     date: toDate(fm.date ?? fm.created),
     source: slug.includes("/zoteronotes/") ? "paper" : "clip",
+    /** all public tag slugs, used for client-side tag filtering */
+    allTags: tags
+      .filter(
+        (t) =>
+          t.startsWith("topic/") ||
+          t.startsWith("method/") ||
+          t.startsWith("area/") ||
+          t.startsWith("task/") ||
+          t.startsWith("hardware/"),
+      )
+      .map((t) => t),
   }
 }
 
@@ -185,7 +198,15 @@ const toolbarScript = `
     })
   })
 
-  var state = { sort: "added-desc", source: "all", query: "" }
+  var state = { sort: "added-desc", source: "all", query: "", tagList: [] }
+
+  // tag pages: start with the page's own tag pre-applied (build-time context)
+  var tagCtx = document.querySelector(".lit-tag-context")
+  if (tagCtx) {
+    var ownTag = tagCtx.getAttribute("data-tag") || ""
+    if (ownTag) state.tagList.push(ownTag)
+  }
+  var chipBar = index.querySelector(".lit-chipbar")
 
   function fmtDate(ts) {
     var d = new Date(ts)
@@ -193,12 +214,35 @@ const toolbarScript = `
   }
 
   function apply() {
+    renderTagChips()
+    if (chipBar) {
+      if (state.tagList.length > 0) chipBar.classList.add("lit-has-chips")
+      else chipBar.classList.remove("lit-has-chips")
+    }
+    // highlight tag pills that are part of the active filter
+    cards.forEach(function (item) {
+      var pill = item.querySelector(".lit-tag")
+      item.querySelectorAll("a.lit-tag").forEach(function (p) {
+        var t = (p.getAttribute("data-tag") || "").toLowerCase()
+        if (state.tagList.map(function (x) { return x.toLowerCase() }).indexOf(t) >= 0) {
+          p.classList.add("lit-tag-active")
+        } else {
+          p.classList.remove("lit-tag-active")
+        }
+      })
+    })
     // filter
     var visible = cards.filter(function (item) {
       var card = item.querySelector(".lit-card")
       var src = card.getAttribute("data-source")
       if (state.source === "paper" && src !== "paper") return false
       if (state.source === "clip" && src !== "clip") return false
+      if (state.tagList.length > 0) {
+        var tags = (card.getAttribute("data-tags") || "").toLowerCase().split("|")
+        for (var i = 0; i < state.tagList.length; i++) {
+          if (tags.indexOf(state.tagList[i].toLowerCase()) === -1) return false
+        }
+      }
       if (state.query) {
         var hay = (card.getAttribute("data-search") || "").toLowerCase()
         if (hay.indexOf(state.query) === -1) return false
@@ -240,7 +284,7 @@ const toolbarScript = `
 
     visible.sort(cmp)
 
-    if (state.sort === "added-desc" && state.source === "all" && !state.query) {
+    if (state.sort === "added-desc" && state.source === "all" && !state.query && state.tagList.length === 0) {
       // default view: restore build-time area grouping
       var byGroup = new Map()
       visible.forEach(function (item) {
@@ -297,6 +341,48 @@ const toolbarScript = `
     }
   })
 
+  // stacked tag filtering: clicking a tag pill toggles it in state.tagList
+  index.addEventListener("click", function (e) {
+    var t = e.target
+    // tag pill on a card
+    var pill = t.closest ? t.closest("[data-tag]") : null
+    if (pill && pill.classList && pill.classList.contains("lit-tag")) {
+      e.preventDefault()
+      toggleTag(pill.getAttribute("data-tag"))
+      return
+    }
+    // remove-button on an active tag chip
+    if (t.matches && t.matches("[data-tag-remove]")) {
+      e.preventDefault()
+      toggleTag(t.getAttribute("data-tag-remove"))
+    }
+  })
+
+  function toggleTag(tag) {
+    if (!tag) return
+    var i = state.tagList.indexOf(tag)
+    if (i >= 0) state.tagList.splice(i, 1)
+    else state.tagList.push(tag)
+    apply()
+  }
+
+  function renderTagChips() {
+    if (!chipBar) return
+    chipBar.innerHTML = ""
+    state.tagList.forEach(function (tag) {
+      var chip = document.createElement("span")
+      chip.className = "lit-chip"
+      chip.textContent = tag + " "
+      var x = document.createElement("button")
+      x.className = "lit-chip-x"
+      x.setAttribute("data-tag-remove", tag)
+      x.setAttribute("aria-label", "移除筛选 " + tag)
+      x.textContent = "×"
+      chip.appendChild(x)
+      chipBar.appendChild(chip)
+    })
+  }
+
   apply()
 })();
 `
@@ -311,38 +397,43 @@ function renderToolbar(): ReturnType<typeof h> {
 
   return h(
     "div",
-    { class: "lit-toolbar" },
-    h("input", {
-      class: "lit-toolbar-search",
-      type: "search",
-      placeholder: "搜索标题 / 作者 / 标签…",
-      "data-search-input": "",
-      "aria-label": "搜索文献",
-    }),
+    { class: "lit-toolbar-wrap" },
     h(
-      "label",
-      { class: "lit-toolbar-field" },
-      h("span", { class: "lit-toolbar-label" }, "类型"),
-      select("data-source-select", [
-        ["all", "全部"],
-        ["paper", "论文"],
-        ["clip", "网页摘录"],
-      ]),
+      "div",
+      { class: "lit-toolbar" },
+      h("input", {
+        class: "lit-toolbar-search",
+        type: "search",
+        placeholder: "搜索标题 / 作者 / 标签…",
+        "data-search-input": "",
+        "aria-label": "搜索文献",
+      }),
+      h(
+        "label",
+        { class: "lit-toolbar-field" },
+        h("span", { class: "lit-toolbar-label" }, "类型"),
+        select("data-source-select", [
+          ["all", "全部"],
+          ["paper", "论文"],
+          ["clip", "网页摘录"],
+        ]),
+      ),
+      h(
+        "label",
+        { class: "lit-toolbar-field" },
+        h("span", { class: "lit-toolbar-label" }, "排序"),
+        select("data-sort-select", [
+          ["added-desc", "入库时间 新→旧"],
+          ["added-asc", "入库时间 旧→新"],
+          ["year-desc", "论文年份 新→旧"],
+          ["year-asc", "论文年份 旧→新"],
+          ["title-asc", "标题 A→Z"],
+          ["title-desc", "标题 Z→A"],
+        ]),
+      ),
+      h("span", { class: "lit-result" }, h("span", { class: "lit-result-count" }), " 篇"),
     ),
-    h(
-      "label",
-      { class: "lit-toolbar-field" },
-      h("span", { class: "lit-toolbar-label" }, "排序"),
-      select("data-sort-select", [
-        ["added-desc", "入库时间 新→旧"],
-        ["added-asc", "入库时间 旧→新"],
-        ["year-desc", "论文年份 新→旧"],
-        ["year-asc", "论文年份 旧→新"],
-        ["title-asc", "标题 A→Z"],
-        ["title-desc", "标题 Z→A"],
-      ]),
-    ),
-    h("span", { class: "lit-result" }, h("span", { class: "lit-result-count" }), " 篇"),
+    h("div", { class: "lit-chipbar" }),
   )
 }
 
@@ -390,6 +481,7 @@ function renderIndexSection(slug: string, groups: Group[], topicNav: TopicNav[])
                   "data-title": e.title,
                   "data-source": e.source,
                   "data-search": search,
+                  "data-tags": e.allTags.join("|"),
                 },
                 h(
                   "h3",
@@ -426,6 +518,9 @@ function renderIndexSection(slug: string, groups: Group[], topicNav: TopicNav[])
                         {
                           class: `lit-tag lit-tag-${ns}`,
                           href: resolveRelative(slug, `tags/${t}`),
+                          // cross-namespace tag link: carries the tag for the
+                          // toolbar to combine with the target page's own tag
+                          "data-tag": t,
                         },
                         t.split("/")[1] ?? t,
                       )
@@ -601,9 +696,27 @@ const renderBody = (props: QuartzComponentProps) => {
   stripPrivateSections(props.tree)
   const original = htmlToJsx(props.tree)
 
-  if (slug !== `${PREFIX}/index`) {
+  if (slug !== `${PREFIX}/index` && !isLitTagSlug(slug)) {
     // MOC keeps its hand-written content; index page is fully generated
     return h("div", { class: "lit-page" }, original)
+  }
+
+  if (isLitTagSlug(slug)) {
+    // Tag page: unified card list with the same toolbar as the index page.
+    // The page's own tag is pre-applied as a client-side filter, and clicking
+    // tag pills on cards ADDS more filters (stacked, AND semantics).
+    const entries = collectEntries(props.allFiles as any)
+    const groups = [{ label: "文献列表", anchor: "tag", items: entries }]
+    return h(
+      "div",
+      { class: "lit-page lit-tag-page" },
+      h("div", {
+        class: "lit-tag-context",
+        "data-tag": slug === "tags" ? "" : slug.split("/").slice(1).join("/"),
+      }),
+      renderIndexSection(slug, groups, []),
+      h("div", { class: "lit-summary" }, `共 ${entries.length} 篇文献 · 构建时自动生成`),
+    )
   }
 
   const entries = collectEntries(props.allFiles as any)
@@ -767,6 +880,42 @@ const css = `
   cursor: pointer;
 }
 .lit-toolbar-select:hover { border-color: var(--gray); }
+/* wrap toolbar + chip bar */
+.lit-toolbar-wrap { margin-block: 0.75rem 1.6rem; }
+.lit-toolbar-wrap .lit-toolbar { margin-block: 0; }
+
+/* active tag filter chips */
+.lit-chipbar {
+  display: none;
+  flex-wrap: wrap; align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+.lit-chipbar.lit-has-chips { display: flex; }
+.lit-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--secondary);
+  background: color-mix(in srgb, var(--secondary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--secondary) 30%, transparent);
+  border-radius: 999px;
+  padding: 0.14rem 0.4rem 0.14rem 0.65rem;
+}
+.lit-chip-x {
+  font: inherit; font-size: 0.85rem; line-height: 1;
+  border: none; background: none; cursor: pointer;
+  color: var(--gray);
+  padding: 0 0.15rem;
+}
+.lit-chip-x:hover { color: var(--dark); }
+
+/* tag pills on cards: clickable toggle look + active state */
+.lit-index a.lit-tag { cursor: pointer; }
+.lit-index a.lit-tag.lit-tag-active {
+  background: color-mix(in srgb, var(--secondary) 22%, transparent);
+  color: var(--secondary);
+  font-weight: 600;
+}
 .lit-result {
   margin-left: auto;
   font-size: 0.78rem; color: var(--gray);
@@ -847,12 +996,45 @@ const css = `
 
 const LIT_SLUGS = new Set([`${PREFIX}/index`, `${PREFIX}/02-literature-moc`])
 
+/** Tag namespaces we take over from the generic TagPage. */
+const TAGGED_NS = ["topic", "method", "area", "task", "hardware", "software", "type", "source"]
+const isLitTagSlug = (slug: string): boolean => {
+  if (slug === "tags" || slug === "tags/index") return true
+  if (!slug.startsWith("tags/")) return false
+  const ns = slug.split("/")[1]
+  return TAGGED_NS.includes(ns)
+}
+
 const LiteratureIndexPage: QuartzPageTypePlugin = () => ({
   name: "LiteratureIndexPage",
-  priority: 15,
-  match: ({ slug }) => LIT_SLUGS.has(slug),
+  // Must beat TagPage (priority 10) so our unified card list + toolbar wins
+  priority: 20,
+  match: ({ slug }) => LIT_SLUGS.has(slug) || isLitTagSlug(slug),
   layout: "content",
   body: LiteratureBody,
+  // All tag pages (virtual or content) belong to us now — TagPage is disabled.
+  generate: ({ content }) => {
+    // collect every tag from published files (all namespaces)
+    const tagSet = new Set<string>()
+    for (const [, file] of content) {
+      const fm = (file.data?.frontmatter ?? {}) as Fm
+      const tags: string[] = fm.tags ?? []
+      for (const t of tags) tagSet.add(`tags/${t}`)
+    }
+    tagSet.add("tags/index") // the tag index page
+    // avoid duplicates with real content files
+    const existing = new Set<string>()
+    for (const [, file] of content) {
+      const s = file.data?.slug
+      if (s && s.startsWith("tags/")) existing.add(s)
+    }
+    const virtualPages: { slug: string; title: string; data: Record<string, unknown> }[] = []
+    for (const slug of tagSet) {
+      if (existing.has(slug) || slug === "tags") continue
+      virtualPages.push({ slug, title: slug.split("/").slice(1).join("/"), data: {} })
+    }
+    return virtualPages
+  },
   treeTransforms: () => [
     // public pages: drop reading-status tag links everywhere
     (root, slug, componentData) => {

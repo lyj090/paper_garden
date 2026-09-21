@@ -293,6 +293,9 @@ plugins:
   - source: ./plugins/literature-index
     enabled: true
     order: 15
+    layout:
+      position: left
+      priority: 40
   - source: ./plugins/privacy-filter
     enabled: true
     order: 4

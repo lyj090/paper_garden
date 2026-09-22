@@ -1,11 +1,16 @@
 name: Deploy Quartz to GitHub Pages
 
 on:
+  # 1) 本仓库（站点主题/配置）自身改动
   push:
     branches: [main]
+  # 2) 笔记内容更新：由 Obsidian 仓库的 trigger-digital-garden.yml 跨仓库触发
+  #    （因为本仓库构建时虽会 clone vault，但**不监听** vault 的 push）
   workflow_dispatch:
-  schedule:
-    - cron: "37 2 * * *"  # 每天凌晨，错峰避免整点拥堵
+  # 3) 定时兜底已移除：GitHub 会在仓库连续 60 天无活动后自动禁用 schedule，
+  #    原先的 cron 实际自 2026-08-24 起就已静默失效（且 Actions 的 cron 只保证
+  #    "尽力而为"，实测执行时间从 06:47 漂到 03:31 UTC）。留着只会制造
+  #    "以为有兜底"的错觉，故删除；上线由上面两条保证。
 
 permissions:
   contents: read

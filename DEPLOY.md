@@ -63,3 +63,67 @@ Obsidian push ──→ trigger-digital-garden.yml ──(repository dispatch, P
 
 > 排查提示：若在 UI 上"更新了 secret"却仍报错，用 API 确认 `updated_at` 是否真的刷新：
 > `curl -H "Authorization: Bearer $TOK" https://api.github.com/repos/lyj090/Obsidian/actions/secrets/DIGITAL_GARDEN_PAT`
+
+## 本地搭建与新机器
+
+```bash
+git clone https://github.com/lyj090/paper_garden.git my-digital-garden
+cd my-digital-garden
+# content/ 已被 .gitignore 忽略，不会随仓库分发，需自备：
+#   本地有 vault → 符号链接
+ln -s "/path/to/Obsidian Vault" content
+#   否则 → 浅克隆
+# git clone --depth 1 https://github.com/lyj090/Obsidian.git content
+npm ci
+npx quartz build --serve      # → http://localhost:8080
+```
+
+> CI 里 `content/` **不是**符号链接：构建前会 `rm -rf content` 再 `git clone`。
+
+### Remote 结构
+
+```
+origin    →  git@github.com:lyj090/paper_garden.git    (fork)
+upstream  →  https://github.com/jackyzha0/quartz.git   (上游)
+```
+
+## CI 配置要点
+
+| 项 | 值 | 原因 |
+| --- | --- | --- |
+| 克隆深度 | `--depth 1` | 减少 90%+ 数据。`--filter=blob:none --sparse` 与 GitHub 不兼容（exit 128），已回退 |
+| 插件缓存 | `actions/cache@v5` | 跳过 46 个插件安装 |
+| npm 缓存 | `setup-node` | 跳过 `npm ci` |
+| Node | 22 + `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` | 消除 actions@v4 的 Node 20 弃用警告 |
+
+构建耗时：缓存命中 ~30s，无缓存 ~1.5min。
+
+## 排错
+
+| 问题 | 原因 | 解决 |
+| --- | --- | --- |
+| **Push 了但站点不更新** | vault 的 trigger workflow 失败（常见：PAT 过期） | 看 vault 那条 workflow 是否标红，不要查本仓库 |
+| trigger 报 `401 Bad credentials` | `DIGITAL_GARDEN_PAT` 过期或权限不足 | 重建 PAT 并更新 secret（用 API 确认 `updated_at` 刷新） |
+| trigger "no job were run" | `if: secrets.X != ''` 空 secret 永远为 false | 移除该 `if`，改在 script 内校验 |
+| 构建报 404 / clone 失败 | `OBSIDIAN_PAT` 失效 | 重建 PAT |
+| Secrets 显示成功但不生效 | 误编辑了别的 secret / 未点 Update | 查 API 的 `updated_at` |
+| 首页显示 RSS XML | 缺少 `index.md` | 创建首页 |
+| citations 插件报错 | 无 bibliography URL | 禁用插件 |
+| OG Image emoji 报错 | codepoint 不在字体映射中 | 禁用插件 |
+| Pages deploy 404 | 新 fork 的 Pages 默认关闭 | API 创建 + 切 workflow 模式 |
+
+## 一次性历史：Fork 改造（2026-06-16）
+
+原先通过 `git clone` + `orphan branch` 创建，GitHub 不识别为 fork。
+改为正式 fork 后可自动追踪与上游差异、PR 可双向提交。
+
+```bash
+gh repo fork jackyzha0/quartz --fork-name paper_garden --default-branch-only
+git push origin main
+gh repo edit lyj090/paper_garden --default-branch main
+gh api --method POST /repos/lyj090/paper_garden/pages \
+  -f "build_type=legacy" -f "source[branch]=main" -f "source[path]=/"
+gh api --method PUT /repos/lyj090/paper_garden/pages -f "build_type=workflow"
+```
+
+**Fork 的两个坑**：secrets 不继承（两个 PAT 都要手动重加）；Pages 默认关闭需手动开启。

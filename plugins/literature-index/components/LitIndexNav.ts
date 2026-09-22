@@ -162,40 +162,40 @@ const LitIndexNavComponent: QuartzComponent = (props: QuartzComponentProps) => {
   )
 }
 
+/* pages that carry the full literature nav: site root (tag index),
+   tag pages, and the 02-literature area pages. Each base selector gets
+   the descendant part appended individually — a bare comma list would
+   leave it attached only to the last item. */
+const SCOPE_BASES = [
+  'body[data-slug="index"]',
+  'body[data-slug^="tags"]',
+  'body[data-slug^="02-literature"]',
+]
+const OTHER_BASE =
+  'body:not([data-slug="index"]):not([data-slug^="02-literature"]):not([data-slug^="tags"])'
+const scope = (descendant: string) =>
+  SCOPE_BASES.map((b) => `${b} ${descendant}`).join(", ")
+
 const css = `
 .lit-leftnav { display: none; }
 
-/* --- literature pages (incl. site root, which renders the tag index):
-   full fenqu + biaoti nav --- */
-body[data-slug="index"],
-body[data-slug^="tags"],
-body[data-slug^="02-literature"],
-body[data-slug="02-literature"] .lit-leftnav {
+${scope(".lit-leftnav")} {
   display: flex; flex-direction: column; gap: 0.1rem;
   padding: 0.25rem 0 0.75rem;
   margin-bottom: 0.5rem;
   border-bottom: 1px solid var(--lightgray);
 }
-body[data-slug="index"],
-body[data-slug^="tags"],
-body[data-slug^="02-literature"],
-body[data-slug="02-literature"] .lit-leftnav-title {
+${scope(".lit-leftnav-title")} {
   font-size: 0.68rem; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--gray);
   margin-block: 0.3rem 0.25rem;
 }
-body[data-slug="index"],
-body[data-slug^="tags"],
-body[data-slug^="02-literature"],
-body[data-slug="02-literature"] .lit-leftnav-section {
+${scope(".lit-leftnav-section")} {
   border-top: 1px solid var(--lightgray);
   margin-top: 0.35rem; padding-top: 0.15rem;
 }
-body[data-slug="index"],
-body[data-slug^="tags"],
-body[data-slug^="02-literature"],
-body[data-slug="02-literature"] .lit-leftnav-link {
+${scope(".lit-leftnav-link")} {
   display: flex; align-items: center; justify-content: space-between;
   gap: 0.6rem;
   font-size: 0.78rem;
@@ -203,56 +203,41 @@ body[data-slug="02-literature"] .lit-leftnav-link {
   border-radius: 6px;
   color: var(--darkgray);
 }
-body[data-slug="index"],
-body[data-slug^="tags"],
-body[data-slug^="02-literature"],
-body[data-slug="02-literature"] .lit-leftnav-link:hover {
+${scope(".lit-leftnav-link:hover")} {
   background: color-mix(in srgb, var(--secondary) 8%, transparent);
   color: var(--secondary);
 }
-body[data-slug="index"],
-body[data-slug^="tags"],
-body[data-slug^="02-literature"],
-body[data-slug="02-literature"] .lit-leftnav-count {
+${scope(".lit-leftnav-count")} {
   font-size: 0.7rem; color: var(--gray);
   font-variant-numeric: tabular-nums;
 }
-body[data-slug="index"],
-body[data-slug^="tags"],
-body[data-slug^="02-literature"],
-body[data-slug="02-literature"] .lit-leftnav-tags {
+${scope(".lit-leftnav-tags")} {
   max-height: 14rem;
   overflow-y: auto;
   scrollbar-width: thin;
 }
-body[data-slug="index"],
-body[data-slug^="tags"],
-body[data-slug^="02-literature"],
-body[data-slug="02-literature"] .lit-leftnav-link.lit-tag-active {
+${scope(".lit-leftnav-link.lit-tag-active")} {
   background: color-mix(in srgb, var(--secondary) 14%, transparent);
   color: var(--secondary);
   font-weight: 600;
 }
-body[data-slug="index"],
-body[data-slug^="tags"],
-body[data-slug^="02-literature"],
-body[data-slug="02-literature"] .lit-leftnav-topic .lit-leftnav-label::before {
+${scope(".lit-leftnav-topic .lit-leftnav-label::before")} {
   content: "#"; opacity: 0.5; margin-right: 0.1rem;
 }
 body[data-slug="index"] .explorer { display: none; }
 
 /* --- other pages: short-cut only --- */
-body:not([data-slug="index"]):not([data-slug^="02-literature"]):not([data-slug^="tags"]) .lit-leftnav {
+${OTHER_BASE} .lit-leftnav {
   display: flex; flex-direction: column; gap: 0.1rem;
   padding: 0.5rem 0 0.75rem;
 }
-body:not([data-slug="index"]):not([data-slug^="02-literature"]):not([data-slug^="tags"]) .lit-leftnav-title {
+${OTHER_BASE} .lit-leftnav-title {
   font-size: 0.68rem; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--gray);
   margin-block: 0.3rem 0.25rem;
 }
-body:not([data-slug="index"]):not([data-slug^="02-literature"]):not([data-slug^="tags"]) .lit-leftnav-link {
+${OTHER_BASE} .lit-leftnav-link {
   display: flex; align-items: center; justify-content: space-between;
   gap: 0.6rem;
   font-size: 0.78rem;
@@ -260,11 +245,11 @@ body:not([data-slug="index"]):not([data-slug^="02-literature"]):not([data-slug^=
   border-radius: 6px;
   color: var(--darkgray);
 }
-body:not([data-slug="index"]):not([data-slug^="02-literature"]):not([data-slug^="tags"]) .lit-leftnav-link:hover {
+${OTHER_BASE} .lit-leftnav-link:hover {
   background: color-mix(in srgb, var(--secondary) 8%, transparent);
   color: var(--secondary);
 }
-body:not([data-slug="index"]):not([data-slug^="02-literature"]):not([data-slug^="tags"]) .lit-leftnav-count {
+${OTHER_BASE} .lit-leftnav-count {
   font-size: 0.7rem; color: var(--gray);
   font-variant-numeric: tabular-nums;
 }

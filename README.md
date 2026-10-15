@@ -1,97 +1,71 @@
 # paper_garden
 
-A [Quartz](https://quartz.jzhao.xyz/) v5 fork that publishes a **public literature
-site** from a **private Obsidian vault**.
+*[中文说明](README.zh-CN.md)*
 
-This repository is the public half of a two-repository setup. It contains only
-the theme, a few custom Quartz plugins, and the Node export/audit scripts. It
-holds **no notes and no private data** — the notes live in a separate private
-vault and are copied into a temporary directory only during a build.
+A [Quartz](https://quartz.jzhao.xyz/) v5 fork that publishes a **public reading
+site** from a **private notes vault**.
 
-```text
-private Obsidian vault                     this repository (public)
-┌───────────────────────┐   push note   ┌────────────────────────────┐
-│ 02-Literature/…       │ ───────────►  │ scripts/publication.mjs    │
-│ .scripts/publishing   │   trigger     │   export → stage → audit   │
-└───────────────────────┘               │ quartz build (GitHub Pages)│
-                                        └────────────────────────────┘
-```
+Two repositories, one boundary:
 
-## What this is for
+- **private source** — your notes and the publish config (never public);
+- **this repo** — the site itself: theme, plugins, export/audit scripts.
 
-I use this to keep a personal, in-progress literature vault private while
-publishing a reviewed subset of it as a readable website for others. The
-pipeline enforces that boundary:
+No notes live here. At build time, approved notes are copied into a temporary
+directory, rendered, audited, and only then published.
 
-1. **Export** — `scripts/publication.mjs export` reads a private config inside
-   the vault and copies only explicitly approved notes (or notes with
-   `publish: true` and `note_contract: 2`) into a fresh staging directory. It
-   strips local `zotero://` shortcuts, private metadata, personal sections and
-   non-public tags, and copies only the images those notes actually reference.
-2. **Build** — Quartz renders the staged directory. The vault is never Quartz's
-   content directory.
-3. **Audit** — `scripts/publication.mjs audit` scans the finished HTML, content
-   index, sitemap, RSS, filenames and assets. It verifies that source links
-   survived rendering, that reviewed image hashes match, and that no unexpected
-   pages, archives, symlinks or private files entered the artifact. A failed
-   audit blocks deployment.
+## How it works
 
-Publication is deliberately conservative: anything unrecognised stops the build
-for review instead of shipping.
+1. **Export** — copy only approved notes out of the source into a fresh staging
+   directory; strip private metadata, local links and personal sections; keep
+   only the images those notes reference.
+2. **Build** — Quartz renders the staged directory.
+3. **Audit** — scan the finished site (pages, index, feeds, filenames, assets)
+   and fail the build if anything unexpected is present.
 
-## Custom plugins
+Conservative by design: anything unrecognised stops publication for review.
 
-| Plugin | Purpose |
+## Plugins
+
+| Plugin | Role |
 | --- | --- |
-| `plugins/literature-index` | Landing page and tag/filter navigation for the literature partition |
-| `plugins/reading-fit` | Reading-layout fixes for figures, tables, lists, TOC and callouts |
-| `plugins/privacy-filter` | Removes legacy private sections and unsafe links at render time |
+| `literature-index` | landing page and tag/filter navigation |
+| `reading-fit` | reading layout for figures, tables, lists, TOC, callouts |
+| `privacy-filter` | drops legacy private sections and unsafe links at render time |
 
 ## Quick start
 
-Requires Node 22+ and its locked npm dependencies.
+Requires Node 22+.
 
 ```bash
 npm ci
 npx quartz plugin install
 
-# Local preview from a private vault and its generated publishing config:
-PRIVATE_SOURCE_PATH=/path/to/vault \
-PUBLISHING_CONFIG=/path/to/vault/.scripts/publishing.yaml \
+PRIVATE_SOURCE_PATH=/path/to/source \
+PUBLISHING_CONFIG=/path/to/config \
   ./setup.sh
 ```
 
-`setup.sh` exports the approved subset, builds it and serves it on
-`http://127.0.0.1:8080`. It never reads the vault as Quartz's content directory.
+Then open <http://127.0.0.1:8080>. `setup.sh` exports the approved subset,
+builds it and serves it; the source vault is never used as the content directory.
 
-## Privacy model
+## Privacy
 
-Private information (vault path, selection list, private vocabulary, Zotero
-settings) lives **outside this repository** in a git-ignored local config
-(`*.local.yaml`, `.vault-source/`, `.publication/`). Only two things cross into
-this public repository:
+Private data (paths, selection, vocabulary, service settings) stays outside this
+repository in ignored local files. Only the theme, plugins and scripts are
+public, together with the audited static site built from approved notes.
 
-- the theme, plugins and scripts;
-- the built, audited static site, which contains just the approved notes.
+## Deploy
 
-Reviewed paper figures are validated against a private, hash-bound figure
-ledger stored with the notes; the ledger itself is never published.
+See [DEPLOY.md](DEPLOY.md).
 
-## Deployment
+## Upstream
 
-See [DEPLOY.md](DEPLOY.md). CI checks the repository variable
-`PRIVATE_SOURCE_REPOSITORY` and the secret `OBSIDIAN_PAT`, exports and audits
-the approved content, then uploads the artifact to GitHub Pages.
-
-## Relationship to upstream
-
-This is a fork of **[jackyzha0/quartz](https://github.com/jackyzha0/quartz)**
-(branch `v5`). It tracks upstream and rebases local changes on top of it:
+A fork of [jackyzha0/quartz](https://github.com/jackyzha0/quartz) (branch `v5`).
+Track upstream with:
 
 ```bash
 git fetch upstream
 git rebase upstream/v5
 ```
 
-Upstream Quartz documentation: <https://quartz.jzhao.xyz/>.
-Licensed under the MIT License, see [LICENSE.txt](LICENSE.txt).
+MIT licensed — see [LICENSE.txt](LICENSE.txt).

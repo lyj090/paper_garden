@@ -135,3 +135,16 @@ test('an authored opening must contain the known original-source URL', async (t)
   const f = await fixture(t, '## 原文与代码\n- [Unrelated](https://example.org/other)\n## Method\nEvidence')
   await assert.rejects(exportContent(f.opts), /source-opening-metadata-mismatch/)
 })
+
+test('vault-internal check directives are dropped, not published as raw HTML', async (t) => {
+  // A line the private isolation guard waives carries a `<!-- check:... -->`
+  // directive. It is a control comment, so export must strip it rather than
+  // reject the note as unreviewed raw HTML — and it must not reach the output.
+  const body = '## 原文与代码\n- [原文](https://example.org/paper)\n\n## Method\n![Figure 3. Result](assets/panel.png) <!-- check:isolation-ok: paper hardware -->\n'
+  const f = await fixture(t, body)
+  await exportContent(f.opts)
+  const staged = await fs.readFile(path.join(f.opts.output, '02-Literature/ZoteroNotes/paper.md'), 'utf8')
+  assert.doesNotMatch(staged, /check:isolation-ok/)
+  assert.match(staged, /Figure 3/)
+  assert.equal(stripLegacy('## Method\nx <!-- check:publish-isolation allow-concepts -->\ny'), '## Method\nx\ny')
+})

@@ -20,6 +20,12 @@ export const PERSONAL_HEADING = /^(?:\d+[.、]\s*)?(?:项目关联(?:与本笔�
 // caveats, local context. Unlike PERSONAL_HEADING it needs no keyword match, so
 // it also hides sections whose title looks like ordinary paper content.
 export const PRIVATE_MARKER = /^\s*(?:<!--\s*private\b[^>]*-->\s*|<<<\s*private\s*>>>)\s*$/i
+// Vault-internal review directives such as `<!-- check:isolation-ok: ... -->`
+// are control comments consumed by the private isolation guard, not content.
+// Strip them at export so the guard can waive an in-paper line without the
+// directive itself reaching the public artifact (where it would look like
+// unreviewed raw HTML).
+export const INTERNAL_DIRECTIVE = /[ \t]*<!--\s*check:[^>]*?-->/gi
 const PRIVATE_SCHEME = /(?:zotero|obsidian|file):\/\//i
 const LOCAL_PATH = /(?:\/home\/|\/Users\/|[A-Z]:\\Users\\)/i
 const INTERNAL_CONTEXT = /当前项目|我的项目|本地项目|我们的项目|我们项目/
@@ -126,6 +132,8 @@ export function cutAtPrivateMarker(body) {
 export function stripLegacy(body) {
   // The explicit divider wins over heading heuristics: cut to EOF first.
   body = cutAtPrivateMarker(body)
+  // Drop control comments before parsing; they are directives, not content.
+  body = body.replace(INTERNAL_DIRECTIVE, "")
   let tree = parser.parse(body)
   const personal = tree.children.find((n) => n.type === "heading" && PERSONAL_HEADING.test(textOf(n).trim()))
   if (personal) body = body.slice(0, personal.position.start.offset)

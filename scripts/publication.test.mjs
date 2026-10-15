@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import sharp from 'sharp'
-import { exportContent, auditArtifact, checkText, checkUrl, stripLegacy } from './publication.mjs'
+import { exportContent, auditArtifact, checkText, checkUrl, stripLegacy, cutAtPrivateMarker } from './publication.mjs'
 
 const hash = (b) => crypto.createHash('sha256').update(b).digest('hex')
 const cfg = { garden: { include: ['02-Literature/ZoteroNotes/paper.md'] }, privacy: { require_terms: true, terms: ['synthetic-private-canary'] } }
@@ -46,6 +46,14 @@ test('a private heading truncates through later public-looking headings; fenced 
   assert.equal(stripLegacy('## Method\nEvidence\n## 9. 我的判读\nprivate\n## Results\nprivate'), '## Method\nEvidence')
   assert.match(stripLegacy('```md\n## 我的判断\n```\n## Method\nEvidence'), /Evidence/)
 })
+test('an explicit private divider hides everything below it, whatever the heading', () => {
+  const body = '## Method\nEvidence\n\n<!-- private -->\n\n## 10. Evidence boundaries\nlocal only\n'
+  assert.equal(stripLegacy(body), '## Method\nEvidence')
+  assert.equal(stripLegacy('## Method\nEvidence\n\n<<< private >>>\n## 10. Anything\nx'), '## Method\nEvidence')
+  // A note that only documents the marker inside a fence must not be cut.
+  assert.match(cutAtPrivateMarker('```md\n<!-- private -->\n```\n## Results\nEvidence'), /Evidence/)
+  assert.equal(cutAtPrivateMarker('## Results\nEvidence'), '## Results\nEvidence')
+})
 test('export keeps only referenced images and public metadata', async (t) => {
   const f = await fixture(t); const r = await exportContent(f.opts)
   assert.equal(r.assets, 1)
@@ -53,6 +61,14 @@ test('export keeps only referenced images and public metadata', async (t) => {
   assert.doesNotMatch(text, /ITEM0001|rel\/private/)
   await assert.rejects(fs.access(path.join(f.opts.output, '02-Literature/ZoteroNotes/assets/orphan.png')))
   await assert.rejects(fs.access(path.join(f.opts.output, '02-Literature/ZoteroNotes/assets/figure-ledger.json')))
+})
+test('content below the private divider never reaches the staged output', async (t) => {
+  const body = '## 原文与代码\n- [原文](https://example.org/paper)\n\n## Method\n![Figure 3. Result](assets/panel.png)\n\n<!-- private -->\n\n## 10. Evidence boundaries\nlocal-only-review-note\n'
+  const f = await fixture(t, body)
+  await exportContent(f.opts)
+  const text = await fs.readFile(path.join(f.opts.output, '02-Literature/ZoteroNotes/paper.md'), 'utf8')
+  assert.match(text, /## Method/)
+  assert.doesNotMatch(text, /Evidence boundaries|local-only-review-note|<!-- private -->/)
 })
 test('a changed image invalidates its review', async (t) => {
   const f = await fixture(t)

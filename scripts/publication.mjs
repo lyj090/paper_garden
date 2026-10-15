@@ -15,6 +15,11 @@ import remarkParse from "remark-parse"
 import sharp from "sharp"
 
 export const PERSONAL_HEADING = /^(?:\d+[.、]\s*)?(?:项目关联(?:与本笔记判读)?|本笔记判读|我的(?:判读|判断|批注|理解|启发|看法|评价)|私人笔记|Personal Notes|My Notes)(?:\s|[:：（(]|$)/i
+// An explicit divider marking where publishable content ends. Everything from
+// this marker to EOF is private by construction: review notes, reproduction
+// caveats, local context. Unlike PERSONAL_HEADING it needs no keyword match, so
+// it also hides sections whose title looks like ordinary paper content.
+export const PRIVATE_MARKER = /^\s*(?:<!--\s*private\b[^>]*-->\s*|<<<\s*private\s*>>>)\s*$/i
 const PRIVATE_SCHEME = /(?:zotero|obsidian|file):\/\//i
 const LOCAL_PATH = /(?:\/home\/|\/Users\/|[A-Z]:\\Users\\)/i
 const INTERNAL_CONTEXT = /当前项目|我的项目|本地项目|我们的项目|我们项目/
@@ -102,7 +107,25 @@ export function splitNote(text) {
   if (!fm || typeof fm !== "object" || Array.isArray(fm)) fail("frontmatter-invalid")
   return { fm, body: text.slice(match[0].length).trimStart() }
 }
+// Cut at the private divider, ignoring fenced code so a note may document the
+// marker itself. Everything from the marker to EOF is dropped.
+export function cutAtPrivateMarker(body) {
+  const lines = body.split(/\r?\n/)
+  let fence = null
+  for (let i = 0; i < lines.length; i++) {
+    const fenceMark = /^\s{0,3}(`{3,}|~{3,})/.exec(lines[i])
+    if (fenceMark) {
+      if (!fence) fence = fenceMark[1]
+      else if (fenceMark[1][0] === fence[0] && fenceMark[1].length >= fence.length) fence = null
+      continue
+    }
+    if (!fence && PRIVATE_MARKER.test(lines[i])) return lines.slice(0, i).join("\n")
+  }
+  return body
+}
 export function stripLegacy(body) {
+  // The explicit divider wins over heading heuristics: cut to EOF first.
+  body = cutAtPrivateMarker(body)
   let tree = parser.parse(body)
   const personal = tree.children.find((n) => n.type === "heading" && PERSONAL_HEADING.test(textOf(n).trim()))
   if (personal) body = body.slice(0, personal.position.start.offset)

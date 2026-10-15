@@ -12,6 +12,20 @@ export function isPersonalSectionHeading(text: string): boolean {
 function textOf(node: any): string {
   return node.value ?? (node.children ?? []).map(textOf).join("")
 }
+// Divider marking where publishable content ends. Everything after it is
+// removed at render time too, so a draft rendered directly is still cut.
+export const PRIVATE_MARKER = /^\s*(?:<!--\s*private\b[^>]*-->|<<<\s*private\s*>>>)\s*$/i
+function isPrivateMarker(node: any): boolean {
+  return (node.type === "raw" || node.type === "text" || node.type === "comment") &&
+    PRIVATE_MARKER.test(String(node.value ?? ""))
+}
+function markerBoundary(children: any[]): number {
+  for (let i = 0; i < children.length; i++) {
+    if (isPrivateMarker(children[i])) return i
+    for (const child of children[i].children ?? []) if (isPrivateMarker(child)) return i
+  }
+  return -1
+}
 export const rehypeStripPrivate = (): Plugin<[], Root> => () => (tree, file: any) => {
   const fm = file.data?.frontmatter
   if (fm?.publication_schema !== 2 || fm?.publish !== true) throw new Error("unstaged-publication-input")
@@ -19,6 +33,8 @@ export const rehypeStripPrivate = (): Plugin<[], Root> => () => (tree, file: any
   for (const key of Object.keys(fm)) if (!allowed.has(key)) delete fm[key]
   if (Array.isArray(fm.tags)) fm.tags = fm.tags.filter((t: unknown) => typeof t === "string" && PUBLIC_TAG_RE.test(t))
   const children: any[] = tree.children
+  const marker = markerBoundary(children)
+  if (marker >= 0) children.splice(marker)
   const boundary = children.findIndex((n) => n.type === "element" && /^h[1-6]$/.test(n.tagName) && isPersonalSectionHeading(textOf(n)))
   if (boundary >= 0) children.splice(boundary)
   if (Array.isArray(file.data.toc)) {

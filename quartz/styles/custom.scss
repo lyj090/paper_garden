@@ -1,3 +1,375 @@
 @use "./variables.scss" as *;
 
-// put your custom CSS here!
+// Things-inspired reading surface: narrow measure, generous rhythm, and a
+// neutral palette supplied by quartz.config.yaml.
+.center > article {
+  width: min(100%, 46rem);
+  margin-inline: auto;
+}
+
+.center > article p,
+.center > article li {
+  line-height: 1.78;
+}
+
+.center > article p {
+  margin-block: 1.1rem;
+}
+
+.center > article h1,
+.center > article h2,
+.center > article h3,
+.center > article h4,
+.center > article h5,
+.center > article h6 {
+  font-weight: 600;
+}
+
+.center > article h1 {
+  margin-top: 2.8rem;
+  margin-bottom: 1.35rem;
+}
+
+.center > article h2 {
+  margin-top: 2.35rem;
+  margin-bottom: 1.1rem;
+}
+
+.center > article h3,
+.center > article h4,
+.center > article h5,
+.center > article h6 {
+  margin-top: 1.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.center > article blockquote {
+  margin-block: 1.5rem;
+  padding-block: 0.2rem;
+  color: var(--darkgray);
+}
+
+.center > article .table-container {
+  margin-block: 1.5rem;
+}
+
+.center > article .table-container > table {
+  margin-inline: 0;
+}
+
+// ---------------------------------------------------------------------------
+// Figure + caption binding
+//
+// These notes write figures as an image paragraph followed by a paragraph
+// whose only child is <em>:
+//
+//     ![Fig. 1. …](assets/…jpg)
+//
+//     *Fig. 1. 三台事件相机…*
+//
+// The stock rule in base.scss is `p > img + em`, which only matches when the
+// caption sits *inside* the same paragraph as the image. It never matches this
+// pattern, so captions render as ordinary inline paragraphs: no visual tie to
+// the figure, and the 1rem negative offset does nothing. Target the sibling
+// paragraph instead and give it figure-caption typography.
+// ---------------------------------------------------------------------------
+.center > article p > img {
+  display: block;
+  margin-inline: auto;
+}
+
+// The caption paragraph: a <p> that directly follows an image-only paragraph.
+.center > article p:has(> img:only-child) + p,
+.center > article p > em:only-child {
+  max-width: 92%;
+  margin-inline: auto;
+  margin-block: 0.35rem 1.6rem;
+  font-size: 0.86rem;
+  line-height: 1.65;
+  text-align: center;
+  text-wrap: balance;
+}
+
+// Keep the caption glued to its figure: no orphaned caption at a page break.
+.center > article p:has(> img:only-child) {
+  break-after: avoid;
+}
+
+// Wide figures (aspect >= 2) carry the setup schematics and the 3D annotation
+// room; at 46rem they shrink to an unreadable strip. Notes write plain
+// Markdown images with no class, so the breakout cannot be opt-in — it has to
+// be inferred from the rendered box. `:has()` on an <img> that is wider than
+// it is tall is not expressible in CSS, so this is done at runtime by the
+// figure-fit script registered in quartz.config.yaml (see
+// plugins/figure-fit). The rule below is the CSS half: the wide class is added
+// by that script, this just styles it.
+.center > article p:has(> img:only-child) {
+  &.figure-wide {
+    width: calc(100% + 4rem);
+    margin-inline: -2rem;
+
+    @media all and ($mobile) {
+      width: 100%;
+      margin-inline: 0;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tables — numeric legibility
+//
+// ~2000 rows of benchmark comparisons. Two things hurt scanning: digits that
+// are not tabular (decimal points wander between rows) and a 32px line height
+// that makes a 10-row table taller than the section above it.
+// ---------------------------------------------------------------------------
+.center > article table {
+  font-variant-numeric: tabular-nums;
+}
+
+.center > article th,
+.center > article td {
+  line-height: 1.55;
+  vertical-align: baseline;
+}
+
+// Right-align columns whose cells are mostly numbers, so magnitudes compare
+// down the column. `:has` keeps this declarative — no per-table markup.
+.center > article td:nth-child(n + 2) {
+  text-align: end;
+}
+
+.center > article table td:first-child {
+  text-align: start;
+}
+
+// ---------------------------------------------------------------------------
+// Blockquote callouts — the notes' own annotation system
+//
+// These notes do not use Obsidian callouts (`> [!note]`). They use plain
+// blockquotes with an emoji lead, and the emoji carries a fixed meaning:
+//
+//   📌  (73×)  a fact from the paper worth remembering — key numbers, settings
+//   💡  (47×)  transferable insight for this project
+//   ⚠️  (37×)  a caveat, a trap, a limitation
+//
+// Rendering them all as one grey quote bar throws that signal away: a ⚠️
+// caveat reads the same as a 📌 fact. CSS cannot select on text content, so
+// the leading emoji is wrapped in `<span class="callout-lead">` by the
+// reading-fit script; the rules below then key off that span.
+//
+// All colours are derived from the existing palette with `color-mix`, so this
+// adds no new hues and stays inside the current contrast budget.
+// ---------------------------------------------------------------------------
+.center > article blockquote {
+  margin-block: 1.4rem;
+  padding: 0.75rem 1.1rem 0.85rem;
+  border-inline-start-width: 3px;
+  border-inline-start-style: solid;
+  border-inline-start-color: var(--lightgray);
+  border-radius: 0 var(--radius-s, 5px) var(--radius-s, 5px) 0;
+  background-color: color-mix(in srgb, var(--lightgray) 45%, transparent);
+
+  & > p:first-child {
+    margin-top: 0;
+  }
+
+  & > p:last-child {
+    margin-bottom: 0;
+  }
+
+  // The wrapped emoji becomes a badge rather than a stray glyph.
+  & .callout-lead {
+    display: inline-block;
+    margin-inline-end: 0.15em;
+    font-size: 0.95em;
+    // Keep the emoji's own colours; only nudge it off the text baseline.
+    vertical-align: baseline;
+  }
+}
+
+// 📌 — fact from the paper. Most common, so it stays neutral: the existing
+// quote look is already appropriate, and it gives the other two contrast.
+.center > article blockquote:has(.callout-lead-pin) {
+  border-inline-start-color: var(--gray);
+  background-color: color-mix(in srgb, var(--gray) 8%, transparent);
+}
+
+// 💡 — transferable insight. This is the block the reader acts on, so it gets
+// the accent treatment: a stronger rule and a slightly denser surface.
+.center > article blockquote:has(.callout-lead-idea) {
+  border-inline-start-color: var(--secondary);
+  background-color: color-mix(in srgb, var(--secondary) 9%, transparent);
+}
+
+// ⚠️ — caveat. Needs to be unmissable without being alarming: the strongest
+// rule of the three, and a surface tint that separates it from the 📌 facts
+// it usually sits next to.
+.center > article blockquote:has(.callout-lead-warn) {
+  border-inline-start-color: var(--dark);
+  background-color: color-mix(in srgb, var(--dark) 7%, transparent);
+}
+
+// Dark mode: `--dark` is near-white there, so the ⚠️ rule would glare. Fall
+// back to the same neutral the light theme uses for its strongest rule.
+[saved-theme="dark"] .center > article blockquote:has(.callout-lead-warn) {
+  border-inline-start-color: var(--gray);
+}
+
+// ---------------------------------------------------------------------------
+// Lists — hanging indent
+//
+// base.scss zeroes every margin inside `li` and leaves the default 40px
+// padding, so a wrapped Chinese list line starts under the bullet instead of
+// under the text. Restore a hanging indent via negative text-indent.
+// ---------------------------------------------------------------------------
+.center > article ul,
+.center > article ol {
+  padding-inline-start: 1.5rem;
+}
+
+.center > article li {
+  margin-block: 0.3em;
+  padding-inline-start: 0.35em;
+}
+
+.center > article li > ul,
+.center > article li > ol {
+  margin-block: 0.3em;
+}
+
+@media all and ($mobile) {
+  .center > article {
+    width: 100%;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Paper list pages (folder/tag listings): card layout so individual papers
+// stand apart instead of blending into one text stream.
+// ---------------------------------------------------------------------------
+ul.section-ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+li.section-li {
+  margin-bottom: 0;
+
+  & > .section {
+    display: block;
+    border: 1px solid var(--lightgray);
+    border-left: 3px solid var(--lightgray);
+    border-radius: 8px;
+    padding: 0.85rem 1.1rem 0.9rem;
+    background: var(--light);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+
+    &:hover {
+      border-left-color: var(--secondary);
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+    }
+
+    & > .meta {
+      margin: 0 0 0.35rem;
+      opacity: 0.6;
+      font-size: 0.78rem;
+    }
+
+    & > .desc > h3 {
+      margin: 0 0 0.4rem;
+      font-size: 1.02rem;
+      font-weight: 600;
+      line-height: 1.4;
+
+      & > a {
+        background-color: transparent;
+        color: var(--dark);
+
+        &:hover {
+          color: var(--secondary);
+        }
+      }
+    }
+
+    // tag pills — right-aligned column becomes an inline wrap row
+    & > .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin: 0;
+
+      & > li {
+        list-style: none;
+      }
+
+      & > li > a.tag-link {
+        font-size: 0.7rem;
+        line-height: 1.5;
+        border: none;
+        border-radius: 999px;
+        padding: 0.08rem 0.6rem;
+        color: var(--darkgray);
+        background: color-mix(in srgb, var(--secondary) 8%, transparent);
+
+        &::before {
+          content: "";
+        }
+
+        &:hover {
+          color: var(--secondary);
+          background: color-mix(in srgb, var(--secondary) 16%, transparent);
+        }
+      }
+    }
+  }
+}
+
+.popover .section {
+  border: none;
+  padding: 0;
+  box-shadow: none !important;
+}
+
+// ---------------------------------------------------------------------------
+// Noise reduction on structural pages (index / tag listings / literature MOC):
+// Properties table, dates and reading time add no value there and duplicate
+// the tag pills already shown on paper pages.
+// ---------------------------------------------------------------------------
+body[data-slug="index"] details.note-properties,
+body[data-slug^="tags"] details.note-properties,
+body[data-slug^="02-literature"] details.note-properties,
+body[data-slug="index"] .content-meta,
+body[data-slug^="tags"] .content-meta,
+body[data-slug^="02-literature"] .content-meta,
+body[data-slug="index"] ul.tags,
+body[data-slug^="tags"] ul.tags,
+body[data-slug^="02-literature"] ul.tags {
+  display: none;
+}
+
+// Literature landing + MOC pages: date / reading time / moc tags add no
+// information (the page IS the index), and on the landing page the
+// article title duplicates the first body heading.
+body[data-slug="02-literature/index"],
+body[data-slug="02-literature/02-literature-moc"] {
+  & .content-meta,
+  & ul.tags {
+    display: none;
+  }
+}
+
+body[data-slug="02-literature/index"] .article-title {
+  display: none;
+}
+
+// Homepage: the article title just repeats the sidebar site title, and the
+// graph is empty at the site root — both read as clutter there.
+body[data-slug="index"] .article-title,
+body[data-slug="index"] .graph {
+  display: none;
+}
+
+// ---------------------------------------------------------------------------

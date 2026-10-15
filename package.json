@@ -19,7 +19,10 @@
     "test": "tsx --test",
     "profile": "0x -D prof ./quartz/bootstrap-cli.mjs build --concurrency=1",
     "install-plugins": "npx tsx ./quartz/plugins/loader/install-plugins.ts",
-    "prebuild": "npm run install-plugins"
+    "overlay-content": "node scripts/overlay-content.cjs",
+    "prebuild": "npm run install-plugins && npm run overlay-content",
+    "publication:export": "node scripts/publication.mjs export",
+    "publication:audit": "node scripts/publication.mjs audit"
   },
   "engines": {
     "npm": ">=10.9.2",

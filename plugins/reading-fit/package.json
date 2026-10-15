@@ -1,0 +1,19 @@
+{
+  "name": "reading-fit",
+  "version": "1.0.0",
+  "description": "Client-side reading adjustments: panoramic figure breakout, TOC template-heading filter, emoji-led blockquote callouts",
+  "type": "module",
+  "quartz": {
+    "name": "reading-fit",
+    "displayName": "Reading Fit",
+    "description": "Widen panoramic figures, hide template headings in the TOC, and colour emoji-led blockquote callouts",
+    "version": "1.0.0",
+    "category": [
+      "transformer"
+    ],
+    "defaultOrder": 12
+  },
+  "exports": {
+    ".": "./index.ts"
+  }
+}

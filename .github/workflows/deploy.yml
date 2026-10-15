@@ -1,0 +1,102 @@
+name: Deploy Quartz to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - name: Checkout digital-garden repo
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Requires Pages Source = "GitHub Actions" in repo Settings → Pages
+      - name: Configure GitHub Pages source
+        uses: actions/configure-pages@v5
+
+      # Private source is never used as Quartz's content directory.
+      - name: Checkout private source
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ vars.PRIVATE_SOURCE_REPOSITORY }}
+          token: ${{ secrets.OBSIDIAN_PAT }}
+          path: .vault-source
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      # ── 缓存 Quartz 插件（避免每次 clone 46 个插件仓库）──
+      - name: Restore Quartz plugin cache
+        id: plugin-cache
+        uses: actions/cache@v5
+        with:
+          path: .quartz/plugins
+          key: quartz-plugins-${{ hashFiles('quartz.lock.json') }}
+          restore-keys: |
+            quartz-plugins-
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Quartz plugins
+        run: npx quartz plugin install
+
+      - name: Export approved public content
+        run: |
+          mkdir -p "$RUNNER_TEMP/publication"
+          node scripts/publication.mjs export \
+            --config .vault-source/.scripts/publishing.yaml \
+            --source .vault-source --output "$RUNNER_TEMP/publication/content" \
+            --overlay content-extras --quartz-config "$RUNNER_TEMP/publication/quartz.config.yaml"
+
+      - name: Build Quartz
+        env:
+          QUARTZ_CONFIG_PATH: ${{ runner.temp }}/publication/quartz.config.yaml
+        run: npx quartz build -d "$RUNNER_TEMP/publication/content" --concurrency 4
+
+      - name: Disable Jekyll on static output
+        run: touch public/.nojekyll
+
+      - name: Audit complete public artifact
+        run: |
+          node scripts/publication.mjs audit \
+            --config .vault-source/.scripts/publishing.yaml \
+            --content "$RUNNER_TEMP/publication/content" --output public
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

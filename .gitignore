@@ -12,3 +12,10 @@ replit.nix
 .quartz/
 quartz/cli/tui/dist/
 .turbo/
+content
+
+# Private source and disposable publication staging
+.vault-source/
+.publication/
+*.local.yaml
+*.local.json

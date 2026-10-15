@@ -1,0 +1,17 @@
+{
+  "name": "privacy-transform",
+  "version": "1.0.0",
+  "description": "Strips private reading-status data from the public build",
+  "type": "module",
+  "quartz": {
+    "name": "privacy-transform",
+    "displayName": "Privacy Transform",
+    "description": "Remove status/* tags and reading-plan text before publishing",
+    "version": "1.0.0",
+    "category": ["transformer", "filter"],
+    "defaultOrder": 10
+  },
+  "exports": {
+    ".": "./index.ts"
+  }
+}

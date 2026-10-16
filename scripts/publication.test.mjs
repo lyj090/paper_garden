@@ -203,3 +203,11 @@ test('the secret detector does not flag "sk-" inside an ordinary word', async (t
   assert.doesNotThrow(() => checkText('3.3 Compose: performing a task-from-one-shot-prompt', cfg))
   assert.throws(() => checkText('token sk-' + 'a'.repeat(30), cfg), /credential-signature/)
 })
+
+test('TeX parentheses and brackets inside math are not read as links', async (t) => {
+  const f = await fixture(t, '## 原文与代码\n- [原文](https://example.org/paper)\n\n## Method\n\n$$\nL_t(\\theta) = S[\\pi_\\theta](s_t) + c_1 (x)\n$$\n\nInline $f(x)$ and $g[y]$ stay intact.\n')
+  await exportContent(f.opts)
+  const outp = await fs.readFile(path.join(f.opts.output, '02-Literature/ZoteroNotes/paper.md'), 'utf8')
+  assert.match(outp, /S\[\\pi_\\theta\]\(s_t\)/)
+  assert.match(outp, /Inline \$f\(x\)\$/)
+})

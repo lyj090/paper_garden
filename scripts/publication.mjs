@@ -68,6 +68,48 @@ const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"])
 const parser = unified().use(remarkParse)
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex")
 
+// remark-parse without remark-math leaves TeX between `$`/`$$` as ordinary text.
+// Parentheses or brackets there (`S[\pi](s_t)`, `f(x)`) can then look like a
+// markdown link and get rejected as an unapproved/unsafe link. Blank out math
+// spans with spaces of identical length so node offsets still line up, while
+// code fences and genuine links are untouched.
+export function maskMath(md) {
+  const lines = md.split("\n")
+  let fence = null
+  let display = false
+  const out = []
+  for (const line of lines) {
+    const fenceMark = /^\s{0,3}(`{3,}|~{3,})/.exec(line)
+    if (fenceMark && !display) {
+      if (!fence) fence = fenceMark[1]
+      else if (fenceMark[1][0] === fence[0] && fenceMark[1].length >= fence.length) fence = null
+      out.push(line)
+      continue
+    }
+    if (fence) {
+      out.push(line)
+      continue
+    }
+    let res = ""
+    let i = 0
+    while (i < line.length) {
+      if (display) {
+        const end = line.indexOf("$$", i)
+        if (end === -1) { res += " ".repeat(line.length - i); i = line.length; break }
+        res += " ".repeat(end - i + 2); i = end + 2; display = false; continue
+      }
+      if (line.startsWith("$$", i)) { res += "  "; i += 2; display = true; continue }
+      if (line[i] === "$") {
+        const end = line.indexOf("$", i + 1)
+        if (end !== -1) { res += " ".repeat(end - i + 1); i = end + 1; continue }
+      }
+      res += line[i]; i += 1
+    }
+    out.push(res)
+  }
+  return out.join("\n")
+}
+
 function fail(code) {
   // Do not interpolate source filenames, URLs or private terms into CI output.
   throw new Error(code)
@@ -320,7 +362,10 @@ export async function exportContent({ config, source, output, overlay, quartzCon
   for (const [rel, { fm, body }] of notes) {
     const clean = publicFm(fm)
     let md = opening(stripLegacy(body), fm, rel, cfg)
-    const tree = parser.parse(md)
+    // Scan a math-masked copy so TeX parentheses are not misread as links; the
+    // published `md` keeps its math. Masking preserves offsets, so the wiki-link
+    // splice below still applies to the real text.
+    const tree = parser.parse(maskMath(md))
     const openingUrls = []
     for (const node of tree.children.slice(1)) {
       if (node.type === "heading") break

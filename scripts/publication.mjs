@@ -29,7 +29,7 @@ export const INTERNAL_DIRECTIVE = /[ \t]*<!--\s*check:[^>]*?-->/gi
 const PRIVATE_SCHEME = /(?:zotero|obsidian|file):\/\//i
 const LOCAL_PATH = /(?:\/home\/|\/Users\/|[A-Z]:\\Users\\)/i
 const INTERNAL_CONTEXT = /当前项目|我的项目|本地项目|我们的项目|我们项目/
-const TOKEN = /(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{30,}|sk-(?:proj-)?[A-Za-z0-9_-]{24,}|ntn_[A-Za-z0-9]{25,}|-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----)/
+const TOKEN = /(?<![A-Za-z])(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{30,}|sk-(?:proj-)?[A-Za-z0-9_-]{24,}|ntn_[A-Za-z0-9]{25,}|-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----)/
 const NAMESPACES = new Set(["type", "area", "topic", "method", "task", "software", "hardware"])
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"])
 const parser = unified().use(remarkParse)
@@ -151,7 +151,10 @@ export function stripLegacy(body) {
   return body.trim()
 }
 function slugify(s) {
-  return s.replace(/\.md$/i, "").split("/").map((p) => p.replace(/\s/g, "-").replace(/&/g, "-and-").replace(/%/g, "-percent").replace(/[?#]/g, "").toLowerCase()).join("/")
+  // Must match Quartz's slugifyPath so emitted slugs equal the pages Quartz
+  // actually writes. Quartz also strips Windows-reserved characters
+  // (<>:"|*), which appear in Obsidian note titles such as "AMP: ...".
+  return s.replace(/\.md$/i, "").split("/").map((p) => p.replace(/\s/g, "-").replace(/&/g, "-and-").replace(/%/g, "-percent").replace(/[?#]/g, "").replace(/[<>:"|*]/g, "").toLowerCase()).join("/")
 }
 function publicFm(fm) {
   const clean = { publication_schema: 2, publish: true }
@@ -337,6 +340,11 @@ export async function exportContent({ config, source, output, overlay, quartzCon
     if (!rel.endsWith(".md")) continue
     const slug = slugify(rel)
     allowedSlugs.add(slug)
+    // Quartz emits a mixed-case redirect page at the source path (only spaces
+    // become dashes; Windows-reserved characters are kept), e.g. for a note
+    // titled "AMP: ...". Accept those redirect paths as known pages too.
+    allowedSlugs.add(rel.replace(/\.md$/i, "").split("/")
+      .map((seg) => seg.replace(/\s/g, "-").toLowerCase()).join("/"))
     const parts = slug.split("/")
     for (let n = 1; n < parts.length; n++) allowedSlugs.add(parts.slice(0, n).join("/") + "/index")
     for (const tag of splitNote(bytes.toString()).fm.tags ?? []) {

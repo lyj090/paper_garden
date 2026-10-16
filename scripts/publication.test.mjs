@@ -148,3 +148,31 @@ test('vault-internal check directives are dropped, not published as raw HTML', a
   assert.match(staged, /Figure 3/)
   assert.equal(stripLegacy('## Method\nx <!-- check:publish-isolation allow-concepts -->\ny'), '## Method\nx\ny')
 })
+
+test('a colon in a note title resolves to the same slug Quartz emits', async (t) => {
+  // Quartz drops Windows-reserved characters when it slugs a path, so a note
+  // titled "AMP: ..." is served at ".../amp-..." while a naive exporter would
+  // expect ".../amp:-...". Emitted slugs must match Quartz's own slugify.
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'publication-colon-'))
+  t.after(() => fs.rm(tmp, { recursive: true, force: true }))
+  const source = path.join(tmp, 'vault'), dir = path.join(source, '02-Literature/ZoteroNotes')
+  const slug = 'note-with-a-colon: subtitle'
+  await fs.mkdir(path.join(dir, 'assets', slug.toLowerCase().replace(/: /, '-')), { recursive: true })
+  await fs.writeFile(path.join(dir, slug + '.md'),
+    '---\ntitle: "Note: Subtitle"\nnote_contract: 2\nurl: https://example.org/paper\ntags: [type/paper]\n---\n\n## 原文与代码\n- [原文](https://example.org/paper)\n\n## Method\nBody\n')
+  const out = path.join(tmp, 'out')
+  const config = path.join(tmp, 'config.json')
+  await fs.writeFile(config, JSON.stringify({ garden: { include: ['02-Literature/ZoteroNotes/' + slug + '.md'] }, privacy: { require_terms: true, terms: ['canary'] } }))
+  const ok = await exportContent({ config, source, output: out })
+  const manifest = JSON.parse(await fs.readFile(path.join(out, '.publication-manifest.json'), 'utf8'))
+  assert.ok(ok.notes >= 1)
+  const slugs = await fs.readdir(path.join(out, '02-Literature/ZoteroNotes'))
+  assert.ok(slugs.includes(slug + '.md'))
+  assert.ok(manifest.allowedSlugs.includes('02-literature/zoteronotes/note-with-a-colon-subtitle'))
+})
+
+test('the secret detector does not flag "sk-" inside an ordinary word', async (t) => {
+  // "...task-from-one-shot..." contains "sk-" but is not an API key.
+  assert.doesNotThrow(() => checkText('3.3 Compose: performing a task-from-one-shot-prompt', cfg))
+  assert.throws(() => checkText('token sk-' + 'a'.repeat(30), cfg), /credential-signature/)
+})

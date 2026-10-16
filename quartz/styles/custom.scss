@@ -1,375 +1,712 @@
 @use "./variables.scss" as *;
 
-// Things-inspired reading surface: narrow measure, generous rhythm, and a
-// neutral palette supplied by quartz.config.yaml.
-.center > article {
-  width: min(100%, 46rem);
-  margin-inline: auto;
+// The native stack keeps Chinese, Latin and controls consistent without a CDN.
+:root {
+  --bodyFont:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+  --headerFont: var(--bodyFont);
+  --titleFont: var(--bodyFont);
+  --codeFont: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --reading-width: 48rem;
+  --muted: var(--gray);
+  --surface: color-mix(in srgb, var(--lightgray) 22%, var(--light));
+  color-scheme: light;
 }
 
-.center > article p,
-.center > article li {
-  line-height: 1.78;
+:root[saved-theme="dark"] {
+  color-scheme: dark;
 }
 
-.center > article p {
-  margin-block: 1.1rem;
+html {
+  width: 100%;
+  overflow-x: clip;
+  text-size-adjust: 100%;
+  scroll-padding-top: 2rem;
 }
 
-.center > article h1,
-.center > article h2,
-.center > article h3,
-.center > article h4,
-.center > article h5,
-.center > article h6 {
-  font-weight: 600;
+body {
+  font-size: 1rem;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
 }
 
-.center > article h1 {
-  margin-top: 2.8rem;
-  margin-bottom: 1.35rem;
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
-.center > article h2 {
-  margin-top: 2.35rem;
-  margin-bottom: 1.1rem;
+:where(a, button, input, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
-.center > article h3,
-.center > article h4,
-.center > article h5,
-.center > article h6 {
-  margin-top: 1.8rem;
-  margin-bottom: 0.9rem;
+::selection {
+  background: color-mix(in srgb, var(--secondary) 22%, var(--light));
+  color: var(--dark);
 }
 
-.center > article blockquote {
-  margin-block: 1.5rem;
-  padding-block: 0.2rem;
-  color: var(--darkgray);
+// Explicit zero minimums let wide tables/code scroll inside their column.
+.page {
+  max-width: 90rem;
 }
 
-.center > article .table-container {
-  margin-block: 1.5rem;
-}
+.page > #quartz-body {
+  padding-inline: clamp(1.25rem, 3vw, 3rem);
+  grid-template-columns: $sidePanelWidth minmax(0, var(--reading-width)) $sidePanelWidth;
+  column-gap: 3.5rem;
+  row-gap: 0;
+  justify-content: center;
+  align-items: start;
 
-.center > article .table-container > table {
-  margin-inline: 0;
-}
-
-// ---------------------------------------------------------------------------
-// Figure + caption binding
-//
-// These notes write figures as an image paragraph followed by a paragraph
-// whose only child is <em>:
-//
-//     ![Fig. 1. …](assets/…jpg)
-//
-//     *Fig. 1. 三台事件相机…*
-//
-// The stock rule in base.scss is `p > img + em`, which only matches when the
-// caption sits *inside* the same paragraph as the image. It never matches this
-// pattern, so captions render as ordinary inline paragraphs: no visual tie to
-// the figure, and the 1rem negative offset does nothing. Target the sibling
-// paragraph instead and give it figure-caption typography.
-// ---------------------------------------------------------------------------
-.center > article p > img {
-  display: block;
-  margin-inline: auto;
-}
-
-// The caption paragraph: a <p> that directly follows an image-only paragraph.
-.center > article p:has(> img:only-child) + p,
-.center > article p > em:only-child {
-  max-width: 92%;
-  margin-inline: auto;
-  margin-block: 0.35rem 1.6rem;
-  font-size: 0.86rem;
-  line-height: 1.65;
-  text-align: center;
-  text-wrap: balance;
-}
-
-// Keep the caption glued to its figure: no orphaned caption at a page break.
-.center > article p:has(> img:only-child) {
-  break-after: avoid;
-}
-
-// Wide figures (aspect >= 2) carry the setup schematics and the 3D annotation
-// room; at 46rem they shrink to an unreadable strip. Notes write plain
-// Markdown images with no class, so the breakout cannot be opt-in — it has to
-// be inferred from the rendered box. `:has()` on an <img> that is wider than
-// it is tall is not expressible in CSS, so this is done at runtime by the
-// figure-fit script registered in quartz.config.yaml (see
-// plugins/figure-fit). The rule below is the CSS half: the wide class is added
-// by that script, this just styles it.
-.center > article p:has(> img:only-child) {
-  &.figure-wide {
-    width: calc(100% + 4rem);
-    margin-inline: -2rem;
-
-    @media all and ($mobile) {
-      width: 100%;
-      margin-inline: 0;
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Tables — numeric legibility
-//
-// ~2000 rows of benchmark comparisons. Two things hurt scanning: digits that
-// are not tabular (decimal points wander between rows) and a 32px line height
-// that makes a 10-row table taller than the section above it.
-// ---------------------------------------------------------------------------
-.center > article table {
-  font-variant-numeric: tabular-nums;
-}
-
-.center > article th,
-.center > article td {
-  line-height: 1.55;
-  vertical-align: baseline;
-}
-
-// Right-align columns whose cells are mostly numbers, so magnitudes compare
-// down the column. `:has` keeps this declarative — no per-table markup.
-.center > article td:nth-child(n + 2) {
-  text-align: end;
-}
-
-.center > article table td:first-child {
-  text-align: start;
-}
-
-// ---------------------------------------------------------------------------
-// Blockquote callouts — the notes' own annotation system
-//
-// These notes do not use Obsidian callouts (`> [!note]`). They use plain
-// blockquotes with an emoji lead, and the emoji carries a fixed meaning:
-//
-//   📌  (73×)  a fact from the paper worth remembering — key numbers, settings
-//   💡  (47×)  transferable insight for this project
-//   ⚠️  (37×)  a caveat, a trap, a limitation
-//
-// Rendering them all as one grey quote bar throws that signal away: a ⚠️
-// caveat reads the same as a 📌 fact. CSS cannot select on text content, so
-// the leading emoji is wrapped in `<span class="callout-lead">` by the
-// reading-fit script; the rules below then key off that span.
-//
-// All colours are derived from the existing palette with `color-mix`, so this
-// adds no new hues and stays inside the current contrast budget.
-// ---------------------------------------------------------------------------
-.center > article blockquote {
-  margin-block: 1.4rem;
-  padding: 0.75rem 1.1rem 0.85rem;
-  border-inline-start-width: 3px;
-  border-inline-start-style: solid;
-  border-inline-start-color: var(--lightgray);
-  border-radius: 0 var(--radius-s, 5px) var(--radius-s, 5px) 0;
-  background-color: color-mix(in srgb, var(--lightgray) 45%, transparent);
-
-  & > p:first-child {
-    margin-top: 0;
-  }
-
-  & > p:last-child {
-    margin-bottom: 0;
-  }
-
-  // The wrapped emoji becomes a badge rather than a stray glyph.
-  & .callout-lead {
-    display: inline-block;
-    margin-inline-end: 0.15em;
-    font-size: 0.95em;
-    // Keep the emoji's own colours; only nudge it off the text baseline.
-    vertical-align: baseline;
-  }
-}
-
-// 📌 — fact from the paper. Most common, so it stays neutral: the existing
-// quote look is already appropriate, and it gives the other two contrast.
-.center > article blockquote:has(.callout-lead-pin) {
-  border-inline-start-color: var(--gray);
-  background-color: color-mix(in srgb, var(--gray) 8%, transparent);
-}
-
-// 💡 — transferable insight. This is the block the reader acts on, so it gets
-// the accent treatment: a stronger rule and a slightly denser surface.
-.center > article blockquote:has(.callout-lead-idea) {
-  border-inline-start-color: var(--secondary);
-  background-color: color-mix(in srgb, var(--secondary) 9%, transparent);
-}
-
-// ⚠️ — caveat. Needs to be unmissable without being alarming: the strongest
-// rule of the three, and a surface tint that separates it from the 📌 facts
-// it usually sits next to.
-.center > article blockquote:has(.callout-lead-warn) {
-  border-inline-start-color: var(--dark);
-  background-color: color-mix(in srgb, var(--dark) 7%, transparent);
-}
-
-// Dark mode: `--dark` is near-white there, so the ⚠️ rule would glare. Fall
-// back to the same neutral the light theme uses for its strongest rule.
-[saved-theme="dark"] .center > article blockquote:has(.callout-lead-warn) {
-  border-inline-start-color: var(--gray);
-}
-
-// ---------------------------------------------------------------------------
-// Lists — hanging indent
-//
-// base.scss zeroes every margin inside `li` and leaves the default 40px
-// padding, so a wrapped Chinese list line starts under the bullet instead of
-// under the text. Restore a hanging indent via negative text-indent.
-// ---------------------------------------------------------------------------
-.center > article ul,
-.center > article ol {
-  padding-inline-start: 1.5rem;
-}
-
-.center > article li {
-  margin-block: 0.3em;
-  padding-inline-start: 0.35em;
-}
-
-.center > article li > ul,
-.center > article li > ol {
-  margin-block: 0.3em;
-}
-
-@media all and ($mobile) {
-  .center > article {
+  & > .center,
+  & > footer {
+    min-width: 0;
     width: 100%;
+    max-width: var(--reading-width);
+    margin-inline: auto;
+  }
+
+  & > .sidebar {
+    min-width: 0;
+    padding: 4rem 0 2.5rem;
+    gap: 2.25rem;
+    height: 100dvh;
+    font-size: 0.875rem;
+    scrollbar-width: thin;
+  }
+
+  & > .sidebar.left {
+    padding-right: 1.25rem;
+    border-right: 1px solid var(--lightgray);
+  }
+
+  & > .sidebar.right {
+    padding-left: 1.75rem;
+    border-left: 1px solid var(--lightgray);
+  }
+
+  & .page-header {
+    margin: 4rem 0 2.75rem;
+  }
+
+  & > footer {
+    margin-block: 2rem 3rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    opacity: 1;
   }
 }
 
-// ---------------------------------------------------------------------------
-// Paper list pages (folder/tag listings): card layout so individual papers
-// stand apart instead of blending into one text stream.
-// ---------------------------------------------------------------------------
-ul.section-ul {
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-}
+// Index pages use a centered two-column layout instead of an empty right rail.
+.page[data-frame="default"]:has(.lit-index) > #quartz-body,
+.page[data-frame="default"]:has(> #quartz-body > .sidebar.right:empty) > #quartz-body {
+  max-width: 70rem;
+  margin-inline: auto;
+  grid-template-columns: $sidePanelWidth minmax(0, var(--reading-width));
+  grid-template-areas:
+    "grid-sidebar-left grid-header"
+    "grid-sidebar-left grid-center"
+    "grid-sidebar-left grid-footer";
 
-li.section-li {
-  margin-bottom: 0;
-
-  & > .section {
-    display: block;
-    border: 1px solid var(--lightgray);
-    border-left: 3px solid var(--lightgray);
-    border-radius: 8px;
-    padding: 0.85rem 1.1rem 0.9rem;
-    background: var(--light);
-    transition:
-      border-color 0.15s ease,
-      box-shadow 0.15s ease;
-
-    &:hover {
-      border-left-color: var(--secondary);
-      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
-    }
-
-    & > .meta {
-      margin: 0 0 0.35rem;
-      opacity: 0.6;
-      font-size: 0.78rem;
-    }
-
-    & > .desc > h3 {
-      margin: 0 0 0.4rem;
-      font-size: 1.02rem;
-      font-weight: 600;
-      line-height: 1.4;
-
-      & > a {
-        background-color: transparent;
-        color: var(--dark);
-
-        &:hover {
-          color: var(--secondary);
-        }
-      }
-    }
-
-    // tag pills — right-aligned column becomes an inline wrap row
-    & > .tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.35rem;
-      margin: 0;
-
-      & > li {
-        list-style: none;
-      }
-
-      & > li > a.tag-link {
-        font-size: 0.7rem;
-        line-height: 1.5;
-        border: none;
-        border-radius: 999px;
-        padding: 0.08rem 0.6rem;
-        color: var(--darkgray);
-        background: color-mix(in srgb, var(--secondary) 8%, transparent);
-
-        &::before {
-          content: "";
-        }
-
-        &:hover {
-          color: var(--secondary);
-          background: color-mix(in srgb, var(--secondary) 16%, transparent);
-        }
-      }
-    }
-  }
-}
-
-.popover .section {
-  border: none;
-  padding: 0;
-  box-shadow: none !important;
-}
-
-// ---------------------------------------------------------------------------
-// Noise reduction on structural pages (index / tag listings / literature MOC):
-// Properties table, dates and reading time add no value there and duplicate
-// the tag pills already shown on paper pages.
-// ---------------------------------------------------------------------------
-body[data-slug="index"] details.note-properties,
-body[data-slug^="tags"] details.note-properties,
-body[data-slug^="02-literature"] details.note-properties,
-body[data-slug="index"] .content-meta,
-body[data-slug^="tags"] .content-meta,
-body[data-slug^="02-literature"] .content-meta,
-body[data-slug="index"] ul.tags,
-body[data-slug^="tags"] ul.tags,
-body[data-slug^="02-literature"] ul.tags {
-  display: none;
-}
-
-// Literature landing + MOC pages: date / reading time / moc tags add no
-// information (the page IS the index), and on the landing page the
-// article title duplicates the first body heading.
-body[data-slug="02-literature/index"],
-body[data-slug="02-literature/02-literature-moc"] {
-  & .content-meta,
-  & ul.tags {
+  & > .sidebar.right {
     display: none;
   }
 }
 
+.page-title {
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+  font-weight: 650;
+
+  & a {
+    color: var(--dark);
+  }
+}
+
+.article-title {
+  margin: 0.75rem 0 1rem;
+  font-size: clamp(1.6rem, 2.4vw, 2rem);
+  line-height: 1.35;
+  letter-spacing: -0.025em;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.breadcrumb-container {
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  line-height: 1.6;
+
+  & .breadcrumb-element:last-child {
+    display: none;
+  }
+
+  & a {
+    color: var(--muted);
+    font-weight: 400;
+  }
+}
+
+.content-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.note-properties-table {
+  & .metadata-property-value,
+  & .metadata-property-value * {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  & a {
+    white-space: nowrap;
+  }
+}
+
+// This scope covers both ordinary Quartz articles and literature body wrappers.
+.center article,
+.center > .lit-page {
+  width: 100%;
+  min-width: 0;
+  max-width: var(--reading-width);
+  margin-inline: auto;
+}
+
+.center article {
+  font-size: 1.075rem;
+  line-height: 1.95;
+
+  & p,
+  & li {
+    line-height: inherit;
+  }
+
+  & p {
+    margin-block: 1.3em;
+  }
+
+  & :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: 600;
+    line-height: 1.45;
+    letter-spacing: -0.015em;
+    scroll-margin-top: 2rem;
+    text-wrap: pretty;
+  }
+
+  & > h1 {
+    font-size: 1.65rem;
+    margin-block: 3.2rem 1.35rem;
+  }
+
+  & h2 {
+    font-size: 1.4rem;
+    margin-block: 3rem 1.2rem;
+  }
+
+  & h3 {
+    font-size: 1.15rem;
+    margin-block: 2.2rem 0.9rem;
+  }
+
+  & :is(h4, h5, h6) {
+    font-size: 1.0625rem;
+    margin-block: 1.6rem 0.65rem;
+  }
+
+  & > :first-child {
+    margin-top: 0;
+  }
+
+  & :is(ul, ol) {
+    padding-inline-start: 1.5em;
+  }
+
+  & li {
+    margin-block: 0.35em;
+    padding-inline-start: 0.2em;
+  }
+
+  & li > :is(ul, ol) {
+    margin-block: 0.4em;
+  }
+
+  & li::marker {
+    color: var(--muted);
+  }
+
+  & a:not(.tag-link):not([role="anchor"]) {
+    color: var(--secondary);
+    background: transparent;
+    font-weight: 500;
+    padding: 0;
+    border-radius: 0;
+    line-height: inherit;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--secondary) 35%, transparent);
+    text-underline-offset: 0.2em;
+    text-decoration-thickness: 1px;
+
+    &:hover {
+      color: var(--tertiary);
+      text-decoration-color: currentColor;
+    }
+  }
+
+  & :is(h1, h2, h3, h4, h5, h6)[id] > a[href^="#"]:focus-visible {
+    opacity: 1;
+  }
+
+  & blockquote {
+    margin: 1.9rem 0;
+    padding: 1.05rem 1.35rem;
+    border-inline-start: 2px solid var(--gray);
+    border-radius: 0 4px 4px 0;
+    background: var(--surface);
+    font-size: 0.96em;
+
+    & > :first-child {
+      margin-top: 0;
+    }
+
+    & > :last-child {
+      margin-bottom: 0;
+    }
+
+    & .callout-lead {
+      margin-inline-end: 0.15em;
+    }
+
+    &:has(.callout-lead-idea) {
+      border-inline-start-color: var(--secondary);
+    }
+
+    &:has(.callout-lead-warn) {
+      border-inline-start-color: var(--darkgray);
+    }
+  }
+
+  & img {
+    height: auto;
+  }
+
+  & p > img {
+    display: block;
+    margin: 1.5rem auto 0.5rem;
+  }
+
+  // Only emphasized paragraphs immediately beside an image are captions.
+  & p:has(> img:only-child) + p:has(> em:only-child),
+  & p:has(> img) > em:last-child {
+    display: block;
+    max-width: 94%;
+    margin: 0.5rem auto 1.5rem;
+    color: var(--muted);
+    font-size: 0.85em;
+    line-height: 1.65;
+    text-align: center;
+    transform: none;
+  }
+
+  & p:has(> img:only-child) {
+    break-after: avoid;
+  }
+
+  & .table-container {
+    max-width: 100%;
+    margin-block: 2rem;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  & table {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    font-size: 0.88em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  & :is(th, td) {
+    padding: 0.8rem 0.9rem;
+    line-height: 1.6;
+    vertical-align: top;
+    // Respect Markdown's per-column alignment; text columns stay left-aligned.
+    &:not([align]) {
+      text-align: start;
+    }
+  }
+
+  & th {
+    background: var(--surface);
+    border-bottom: 1px solid var(--gray);
+    font-weight: 600;
+  }
+
+  & pre {
+    max-width: 100%;
+    background: var(--surface);
+    border-radius: 6px;
+    line-height: 1.65;
+    overscroll-behavior-x: contain;
+  }
+
+  & .katex-display,
+  & .math-display {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-block: 0.25rem;
+  }
+}
+
+// Navigation is quiet but legible, with usable pointer and keyboard targets.
+.page .lit-leftnav {
+  flex-shrink: 0;
+  margin: 0;
+  padding-block: 0.35rem;
+
+  & .lit-leftnav-title {
+    color: var(--muted);
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+    margin-block: 0.8rem 0.5rem;
+  }
+
+  & .lit-leftnav-link {
+    padding: 0.6rem 0.65rem;
+    font-size: 0.84rem;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+
+  & .lit-leftnav-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  & .lit-leftnav-count {
+    flex-shrink: 0;
+    color: var(--muted);
+  }
+}
+
+.sidebar :is(.toc-header h3, .explorer-toggle h2, .backlinks h3) {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.sidebar .toc {
+  flex: 1 1 auto;
+}
+
+.sidebar .toc-content.overflow {
+  margin-top: 1rem;
+
+  & > li {
+    margin-block: 0.55rem;
+    line-height: 1.6;
+  }
+
+  & > li > a {
+    display: block;
+    color: var(--muted);
+    opacity: 1;
+    font-size: 0.8rem;
+    font-weight: 400;
+
+    &:hover,
+    &.in-view {
+      color: var(--secondary);
+      opacity: 1;
+    }
+
+    &.in-view {
+      font-weight: 600;
+    }
+  }
+}
+
+.search > .search-button {
+  min-height: 2.5rem;
+  border-radius: 6px;
+  background: transparent;
+
+  & > p {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+}
+
+button.darkmode,
+button.readermode {
+  width: 2rem;
+  height: 2.5rem;
+  border-radius: 6px;
+
+  &:hover {
+    background: var(--highlight);
+  }
+
+  & svg {
+    left: calc(50% - 10px);
+  }
+}
+
+// Literature index: single separators and neutral tags keep the titles primary.
+.lit-index {
+  & .lit-group {
+    margin-block: 3rem 3.75rem;
+    scroll-margin-top: 2rem;
+  }
+
+  & .lit-group h2 {
+    font-size: 1.1rem;
+    line-height: 1.5;
+    border-bottom-width: 1px;
+    padding-bottom: 1rem;
+    margin-bottom: 0.6rem;
+  }
+
+  & :is(.lit-list, .lit-flat) {
+    gap: 0;
+  }
+
+  & .lit-item {
+    margin: 0;
+    padding: 0;
+  }
+
+  & .lit-card {
+    padding: 1.75rem 0 1.9rem;
+    border: 0;
+    border-bottom: 1px solid var(--lightgray);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+
+    &:hover {
+      border-color: var(--lightgray);
+      box-shadow: none;
+    }
+  }
+
+  & .lit-card-title {
+    font-size: 1.05rem;
+    line-height: 1.6;
+    margin-bottom: 0.75rem;
+
+    & a {
+      padding: 0;
+      background: transparent;
+      line-height: inherit;
+      font-weight: 600;
+    }
+  }
+
+  & .lit-card-meta {
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.85;
+    margin-bottom: 0.55rem;
+  }
+
+  & .lit-authors {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  & :is(.lit-tag, .lit-tag-method) {
+    color: var(--darkgray);
+    background: var(--highlight);
+    font-size: 0.75rem;
+    line-height: 1.7;
+    padding: 0.15rem 0.55rem;
+    font-weight: 400;
+  }
+}
+
+:root[saved-theme="dark"] .lit-index .lit-tag-method {
+  color: var(--darkgray);
+  background: var(--highlight);
+}
+
+.lit-toolbar {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--lightgray);
+  border-radius: 10px;
+  background: var(--surface);
+  gap: 0.85rem;
+  margin-block: 0 2.25rem;
+}
+
+.lit-toolbar-search,
+.lit-toolbar-select {
+  min-height: 3rem;
+  box-sizing: border-box;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  background: var(--light);
+}
+
+.lit-toolbar-search::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+:is(.lit-toolbar-label, .lit-result, .lit-index .lit-count) {
+  color: var(--muted);
+}
+
+.lit-toolbar-search:focus-visible,
+.lit-toolbar-select:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+}
+
+ul.section-ul {
+  list-style: none;
+  padding: 0;
+}
+
+li.section-li > .section {
+  display: block;
+  padding: 1.6rem 0;
+  border-bottom: 1px solid var(--lightgray);
+
+  & .meta {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  & h3 {
+    font-size: 1.05rem;
+    line-height: 1.6;
+  }
+
+  & h3 > a {
+    background: transparent;
+  }
+}
+
+// Structural pages have their own group heading and do not need note metadata.
+body:is([data-slug="index"], [data-slug^="tags"], [data-slug^="02-literature"]) {
+  & details.note-properties,
+  & .content-meta,
+  & .page-header ul.tags {
+    display: none;
+  }
+}
+
+body[data-slug="index"] .article-title,
 body[data-slug="02-literature/index"] .article-title {
   display: none;
 }
 
-// Homepage: the article title just repeats the sidebar site title, and the
-// graph is empty at the site root — both read as clutter there.
-body[data-slug="index"] .article-title,
-body[data-slug="index"] .graph {
-  display: none;
+.center > hr {
+  margin-block: 2.5rem 0;
 }
 
-// ---------------------------------------------------------------------------
+@media all and ($tablet) {
+  .page > #quartz-body {
+    grid-template-columns: 13rem minmax(0, var(--reading-width));
+    column-gap: 2.5rem;
+
+    & > .sidebar.right {
+      border: 0;
+      padding: 2rem 0 0;
+      height: auto;
+    }
+  }
+}
+
+@media all and ($mobile) {
+  .page > #quartz-body,
+  .page[data-frame="default"]:has(.lit-index) > #quartz-body,
+  .page[data-frame="default"]:has(> #quartz-body > .sidebar.right:empty) > #quartz-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "grid-sidebar-left"
+      "grid-header"
+      "grid-center"
+      "grid-sidebar-right"
+      "grid-footer";
+    padding-inline: clamp(1rem, 4vw, 2rem);
+    column-gap: 0;
+
+    & > .sidebar.left {
+      height: auto;
+      gap: 0.6rem;
+      padding: 1.5rem 0 1.75rem;
+      border-right: 0;
+      border-bottom: 1px solid var(--lightgray);
+      margin-bottom: 1.5rem;
+    }
+
+    & > .sidebar.right {
+      height: auto;
+      border: 0;
+      padding: 1.5rem 0 0;
+    }
+
+    & .page-header {
+      margin-top: 0;
+      margin-bottom: 2rem;
+    }
+  }
+
+  .page-title {
+    font-size: 1.1rem;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .sidebar.left > .flex-component {
+    flex-shrink: 0;
+  }
+
+  .center article {
+    font-size: 1rem;
+    line-height: 1.9;
+
+    & p {
+      margin-block: 1.15em;
+    }
+  }
+
+  // Keep controls at 16px to avoid input-focus zoom on mobile Safari.
+  .lit-toolbar-search,
+  .lit-toolbar-select,
+  .search .search-bar {
+    font-size: 1rem;
+  }
+
+  .lit-toolbar-field {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

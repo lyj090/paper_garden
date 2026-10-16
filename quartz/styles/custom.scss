@@ -102,18 +102,20 @@ textarea {
 }
 
 // Index pages use a centered two-column layout instead of an empty right rail.
-.page[data-frame="default"]:has(.lit-index) > #quartz-body,
-.page[data-frame="default"]:has(> #quartz-body > .sidebar.right:empty) > #quartz-body {
-  max-width: 70rem;
-  margin-inline: auto;
-  grid-template-columns: $sidePanelWidth minmax(0, var(--reading-width));
-  grid-template-areas:
-    "grid-sidebar-left grid-header"
-    "grid-sidebar-left grid-center"
-    "grid-sidebar-left grid-footer";
+@media all and not ($mobile) {
+  .page[data-frame="default"]:has(.lit-index) > #quartz-body,
+  .page[data-frame="default"]:has(> #quartz-body > .sidebar.right:empty) > #quartz-body {
+    max-width: 70rem;
+    margin-inline: auto;
+    grid-template-columns: $sidePanelWidth minmax(0, var(--reading-width));
+    grid-template-areas:
+      "grid-sidebar-left grid-header"
+      "grid-sidebar-left grid-center"
+      "grid-sidebar-left grid-footer";
 
-  & > .sidebar.right {
-    display: none;
+    & > .sidebar.right {
+      display: none;
+    }
   }
 }
 
@@ -647,12 +649,43 @@ body[data-slug="02-literature/index"] .article-title {
     column-gap: 0;
 
     & > .sidebar.left {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
       height: auto;
       gap: 0.6rem;
       padding: 1.5rem 0 1.75rem;
       border-right: 0;
       border-bottom: 1px solid var(--lightgray);
       margin-bottom: 1.5rem;
+
+      & > .page-title {
+        grid-column: 1;
+        grid-row: 1;
+        min-width: 0;
+        white-space: nowrap;
+      }
+
+      & > .mobile-only {
+        display: none;
+      }
+
+      & > .flex-component {
+        grid-column: 2;
+        grid-row: 1;
+        width: fit-content;
+        min-width: 0;
+        justify-self: end;
+      }
+
+      & .search > .search-button {
+        width: 7rem;
+      }
+
+      & > .lit-leftnav,
+      & > .explorer {
+        grid-column: 1 / -1;
+      }
     }
 
     & > .sidebar.right {
@@ -708,5 +741,22 @@ body[data-slug="02-literature/index"] .article-title {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+// The index layout uses :has(), which Sass expands into a higher-specificity
+// :is() selector. Keep its desktop two-column rule from winning on phones.
+@media all and ($mobile) {
+  .page[data-frame="default"]:has(.lit-index) > #quartz-body {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-areas:
+      "grid-sidebar-left"
+      "grid-header"
+      "grid-center"
+      "grid-sidebar-right"
+      "grid-footer";
+    max-width: none;
+    margin-inline: 0;
+    padding-inline: clamp(1rem, 4vw, 2rem);
   }
 }

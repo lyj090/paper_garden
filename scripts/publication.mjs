@@ -26,9 +26,42 @@ export const PRIVATE_MARKER = /^\s*(?:<!--\s*private\b[^>]*-->\s*|<<<\s*private\
 // directive itself reaching the public artifact (where it would look like
 // unreviewed raw HTML).
 export const INTERNAL_DIRECTIVE = /[ \t]*<!--\s*check:[^>]*?-->/gi
+// Local tooling bookkeeping (Zotero item/collection ids, "written by" footers,
+// tag suggestions). It describes the private library, not the paper, so it is
+// removed from the publishable body rather than published or left to fail the
+// export on a per-note basis.
+const LOCAL_TOOLING_LINE = /^\s*(?:[-*+>]\s*)?(?:\*{0,2})(?:Zotero (?:Item|item) ID|Zotero Key|Zotero collection|Zotero attachment|Written to Obsidian by LLM-for-Zotero|Written by LLM-for-Zotero)(?:\*{0,2})\s*[:：]?\s*.*$/gim
+const LOCAL_TOOLING_INLINE = /\s*[（(]Zotero attachment:[^)）]*[)）]\.?/gi
+const LOCAL_TOOLING_SECTION = /^(?:推荐\s*)?Zotero\s*Tags\s*$/i
+export function desensitizeBody(body) {
+  body = body.replace(LOCAL_TOOLING_INLINE, "")
+  body = body.replace(LOCAL_TOOLING_LINE, "")
+  const lines = body.split(/\r?\n/)
+  const keep = []
+  let fence = null
+  let skipDepth = null
+  for (const line of lines) {
+    const fenceMark = /^\s{0,3}(`{3,}|~{3,})/.exec(line)
+    if (fenceMark) {
+      if (!fence) fence = fenceMark[1]
+      else if (fenceMark[1][0] === fence[0] && fenceMark[1].length >= fence.length) fence = null
+      if (skipDepth === null) keep.push(line)
+      continue
+    }
+    const heading = !fence && /^(#{1,6})\s+(.*)$/.exec(line)
+    if (heading) {
+      const depth = heading[1].length
+      if (skipDepth !== null && depth <= skipDepth) skipDepth = null
+      if (skipDepth === null && LOCAL_TOOLING_SECTION.test(heading[2].trim())) { skipDepth = depth; continue }
+    }
+    if (skipDepth === null) keep.push(line)
+  }
+  return keep.join("\n").replace(/\n{3,}/g, "\n\n")
+}
 const PRIVATE_SCHEME = /(?:zotero|obsidian|file):\/\//i
 const LOCAL_PATH = /(?:\/home\/|\/Users\/|[A-Z]:\\Users\\)/i
 const INTERNAL_CONTEXT = /当前项目|我的项目|本地项目|我们的项目|我们项目/
+const INTERNAL_LIBRARY = /Zotero Item ID|Zotero Key|Zotero collection|Zotero attachment|LLM-for-Zotero/i
 const TOKEN = /(?<![A-Za-z])(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{30,}|sk-(?:proj-)?[A-Za-z0-9_-]{24,}|ntn_[A-Za-z0-9]{25,}|-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----)/
 const NAMESPACES = new Set(["type", "area", "topic", "method", "task", "software", "hardware"])
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"])
@@ -66,6 +99,7 @@ export function checkText(text, cfg) {
   if (LOCAL_PATH.test(value)) fail("local-path")
   if (TOKEN.test(value)) fail("credential-signature")
   if (INTERNAL_CONTEXT.test(value)) fail("personal-context")
+  if (INTERNAL_LIBRARY.test(value)) fail("local-library-context")
   for (const term of cfg.privacy?.terms ?? []) {
     if (value.toLowerCase().includes(decoded(term).toLowerCase())) fail("private-vocabulary")
   }
@@ -134,6 +168,8 @@ export function stripLegacy(body) {
   body = cutAtPrivateMarker(body)
   // Drop control comments before parsing; they are directives, not content.
   body = body.replace(INTERNAL_DIRECTIVE, "")
+  // Drop local-library bookkeeping that is not paper content.
+  body = desensitizeBody(body)
   let tree = parser.parse(body)
   const personal = tree.children.find((n) => n.type === "heading" && PERSONAL_HEADING.test(textOf(n).trim()))
   if (personal) body = body.slice(0, personal.position.start.offset)
@@ -199,6 +235,34 @@ function readConfig(config) {
   return cfg
 }
 
+// A printed asset is usually a Figure, but papers also number Tables,
+// Algorithms and Equations, with Arabic or Roman numerals. A bare number means
+// Figure, so reviewed ledgers written before this extension stay valid.
+const LABEL = /^(Figure|Fig\.|图|Table|Algorithm|Equation|表|算法|式)/i
+const IDENT = /^[A-Z]?(?:\.\d+|\d+)(?:\.\d+)?$|^[IVX]+$/i
+function canonicalId(label, ident) {
+  const kind = (label ?? "fig").toLowerCase().replace(/\.$/, "")
+  const group = { figure: "fig", fig: "fig", 图: "fig", table: "table", 表: "table",
+    algorithm: "algo", algo: "algo", 算法: "algo", equation: "eq", eq: "eq", 式: "eq" }
+  return `${group[kind] ?? "fig"}:${ident.toUpperCase()}`
+}
+function mentionIds(alt) {
+  const ids = []
+  for (const m of String(alt ?? "").matchAll(/(Figure|Fig\.|图|Table|Algorithm|Equation|表|算法|式)\s*([A-Z]?(?:\.\d+|\d+)(?:\.\d+)?|[IVX]+)(?![A-Za-z0-9])/gi)) ids.push(canonicalId(m[1], m[2]))
+  return ids
+}
+function ledgerIds(figures) {
+  const ids = []
+  for (const entry of figures) {
+    const text = String(entry).trim()
+    const label = LABEL.test(text) ? text.match(LABEL)[1] : null
+    const ident = text.replace(LABEL, "").trim()
+    if (!IDENT.test(ident)) return null
+    ids.push(canonicalId(label, ident))
+  }
+  return ids
+}
+
 function verifyFigure(root, real, alt) {
   let ledger, record
   try {
@@ -207,14 +271,13 @@ function verifyFigure(root, real, alt) {
     if (records.length !== 1) fail("figure-review-required")
     record = records[0]
   } catch { fail("figure-review-required") }
-  const mentioned = [...String(alt ?? "").matchAll(/(?:Figure|Fig\.?|图)\s*([A-Z]?(?:\.\d+|\d+)(?:\.\d+)?)/gi)].map((m) => m[1])
+  const reviewed = Array.isArray(record.figures) && record.figures.length ? ledgerIds(record.figures) : null
   if (ledger.schema !== 2 || !/^[a-f0-9]{64}$/.test(ledger.source_pdf_sha256 ?? "") ||
       record.status !== "verified" || record.sha256 !== sha(fs.readFileSync(real)) ||
       !Number.isInteger(record.evidence?.page) || record.evidence.page < 1 ||
       record.evidence.method !== "rendered-pdf-visual-comparison" ||
-      !Array.isArray(record.figures) || !record.figures.length ||
-      record.figures.some((n) => typeof n !== "string" || !/^[A-Z]?(?:\.\d+|\d+)(?:\.\d+)?$/i.test(n)) ||
-      JSON.stringify([...new Set(mentioned)].sort()) !== JSON.stringify([...new Set(record.figures)].sort())) fail("figure-review-required")
+      !reviewed ||
+      JSON.stringify([...new Set(mentionIds(alt))].sort()) !== JSON.stringify([...new Set(reviewed)].sort())) fail("figure-review-required")
 }
 
 export async function exportContent({ config, source, output, overlay, quartzConfig }) {

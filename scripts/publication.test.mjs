@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import sharp from 'sharp'
-import { exportContent, auditArtifact, checkText, checkUrl, stripLegacy, cutAtPrivateMarker } from './publication.mjs'
+import { exportContent, auditArtifact, checkText, checkUrl, stripLegacy, cutAtPrivateMarker, desensitizeBody } from './publication.mjs'
 
 const hash = (b) => crypto.createHash('sha256').update(b).digest('hex')
 const cfg = { garden: { include: ['02-Literature/ZoteroNotes/paper.md'] }, privacy: { require_terms: true, terms: ['synthetic-private-canary'] } }
@@ -39,8 +39,21 @@ async function artifact(f) {
 
 test('encoded private text and unsafe URLs fail without echoing matched data', () => {
   for (const text of ['synthetic-private-canary', '%73ynthetic-private-canary', '&#115;ynthetic-private-canary', 'file:///tmp/a', '/home/someone/data', 'zotero://select/a']) assert.throws(() => checkText(text, cfg))
+  for (const text of ['- Zotero Item ID: 492', 'Zotero collection: `01_Thesis / Manipulation`', 'Written by LLM-for-Zotero.']) assert.throws(() => checkText(text, cfg))
   for (const url of ['https://user:pass@example.org', 'http://127.0.0.1/a', 'https://internal/a', 'https://example.org/?access_token=x', 'https://10.0.0.1', 'https://[::1]/a']) assert.throws(() => checkUrl(url, cfg))
   assert.doesNotThrow(() => checkUrl('https://doi.org/10.0000/example', cfg))
+})
+test('local-library bookkeeping is stripped from the publishable body', () => {
+  const body = [
+    '## 文献信息', '- **Zotero Item ID**: 492', '- **标题**: A paper',
+    '## 推荐 Zotero Tags', '- event-based-vision', '- visual-tracking',
+    '## 正文', '真实内容（Zotero attachment: arXiv:2203.15103）.',
+    'Written by LLM-for-Zotero.',
+  ].join('\n')
+  const out = desensitizeBody(body)
+  assert.doesNotMatch(out, /Zotero Item ID|推荐 Zotero Tags|LLM-for-Zotero|event-based-vision|Zotero attachment/i)
+  assert.match(out, /真实内容/)
+  assert.match(out, /## 正文/)
 })
 test('a private heading truncates through later public-looking headings; fenced examples survive', () => {
   assert.equal(stripLegacy('## Method\nEvidence\n## 9. 我的判读\nprivate\n## Results\nprivate'), '## Method\nEvidence')
@@ -77,6 +90,20 @@ test('a changed image invalidates its review', async (t) => {
 })
 test('a wrong printed figure number is blocked even when the filename looks correct', async (t) => {
   const f = await fixture(t, '![Figure 6. Wrong identity](assets/panel.png)')
+  await assert.rejects(exportContent(f.opts), /figure-review-required/)
+})
+test('table, algorithm and roman identities round-trip', async (t) => {
+  for (const [figures, alt] of [[['Table 1'], 'Table 1. Scores'], [['Algorithm 1'], 'Algorithm 1. Training'], [['Table IV'], 'Table IV. Config'], [['B.3'], 'Figure B.3. Appendix']]) {
+    const f = await fixture(t, `![${alt}](assets/panel.png)`)
+    f.ledger.assets[0].figures = figures
+    await fs.writeFile(path.join(f.dir, 'assets/figure-ledger.json'), JSON.stringify(f.ledger))
+    await exportContent(f.opts)
+  }
+})
+test('a table image published under a figure label is blocked', async (t) => {
+  const f = await fixture(t, '![Figure 1. Wrong kind](assets/panel.png)')
+  f.ledger.assets[0].figures = ['Table 1']
+  await fs.writeFile(path.join(f.dir, 'assets/figure-ledger.json'), JSON.stringify(f.ledger))
   await assert.rejects(exportContent(f.opts), /figure-review-required/)
 })
 test('remote images and private wiki links require review', async (t) => {

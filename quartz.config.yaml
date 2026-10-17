@@ -168,13 +168,8 @@ plugins:
       position: right
       priority: 10
   - source: github:quartz-community/search
-    enabled: true
-    layout:
-      position: left
-      priority: 20
-      group: toolbar
-      groupOptions:
-        grow: true
+    # Use the browser's Find command on the complete index or current note.
+    enabled: false
   - source: github:quartz-community/backlinks
     enabled: true
     layout:

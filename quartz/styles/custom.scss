@@ -3,14 +3,12 @@
 // The native stack keeps Chinese, Latin and controls consistent without a CDN.
 :root {
   --bodyFont:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
   --headerFont: var(--bodyFont);
   --titleFont: var(--bodyFont);
   --codeFont: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  --readingFont:
-    "Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif SC", "Songti SC", "STSong", "SimSun",
-    "AR PL UMing CN", Georgia, serif;
+  --readingFont: var(--bodyFont);
   --reading-width: 52rem;
   --canvas: #eeece6;
   --paper-shadow: 0 2px 14px rgb(50 43 32 / 3%);
@@ -59,7 +57,12 @@ textarea {
 
 // Explicit zero minimums let wide tables/code scroll inside their column.
 .page {
-  max-width: 96rem;
+  max-width: 112rem;
+}
+
+// Lists benefit from a wider sheet; notes keep their comfortable reading measure.
+.page:has(.lit-index) {
+  --reading-width: 76rem;
 }
 
 .page > #quartz-body {
@@ -123,7 +126,7 @@ textarea {
 @media all and not ($mobile) {
   .page[data-frame="default"]:has(.lit-index) > #quartz-body,
   .page[data-frame="default"]:has(> #quartz-body > .sidebar.right:empty) > #quartz-body {
-    max-width: 76rem;
+    max-width: none;
     margin-inline: auto;
     grid-template-columns: 13rem minmax(0, var(--reading-width));
     grid-template-areas:
@@ -471,17 +474,6 @@ textarea {
   }
 }
 
-.search > .search-button {
-  min-height: 2.5rem;
-  border-radius: 6px;
-  background: transparent;
-
-  & > p {
-    color: var(--muted);
-    font-size: 0.85rem;
-  }
-}
-
 button.darkmode,
 button.readermode {
   width: 2rem;
@@ -555,6 +547,19 @@ button.readermode {
     margin-bottom: 0.55rem;
   }
 
+  & .lit-pub {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    flex-wrap: wrap;
+  }
+
+  & .lit-venue {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   & .lit-authors {
     white-space: normal;
     display: -webkit-box;
@@ -578,10 +583,10 @@ button.readermode {
 }
 
 .lit-toolbar {
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--lightgray);
-  border-radius: 4px;
-  background: var(--surface);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   gap: 0.85rem;
   margin-block: 0 2.25rem;
 }
@@ -590,7 +595,22 @@ button.readermode {
   margin-block: 1.5rem 2.75rem;
 }
 
-.lit-toolbar-search,
+.lit-find-hint {
+  color: var(--muted);
+  font-family: var(--bodyFont);
+  font-size: 0.8rem;
+  line-height: 1.7;
+  margin-block: 0.75rem 0;
+
+  & kbd {
+    font: inherit;
+  }
+}
+
+.lit-find-mobile {
+  display: none;
+}
+
 .lit-toolbar-select {
   min-height: 3rem;
   box-sizing: border-box;
@@ -599,16 +619,10 @@ button.readermode {
   background: var(--light);
 }
 
-.lit-toolbar-search::placeholder {
-  color: var(--muted);
-  opacity: 1;
-}
-
 :is(.lit-toolbar-label, .lit-result, .lit-index .lit-count) {
   color: var(--muted);
 }
 
-.lit-toolbar-search:focus-visible,
 .lit-toolbar-select:focus-visible {
   outline: 2px solid var(--secondary);
   outline-offset: 2px;
@@ -736,14 +750,6 @@ body:is([data-slug="index"], [data-slug="02-literature/index"])
         justify-self: end;
       }
 
-      & .search > .search-button {
-        width: 2.5rem;
-
-        @media (min-width: 421px) {
-          width: 7rem;
-        }
-      }
-
       & > .lit-leftnav,
       & > .explorer {
         grid-column: 1 / -1;
@@ -782,10 +788,16 @@ body:is([data-slug="index"], [data-slug="02-literature/index"])
   }
 
   // Keep controls at 16px to avoid input-focus zoom on mobile Safari.
-  .lit-toolbar-search,
-  .lit-toolbar-select,
-  .search .search-bar {
+  .lit-toolbar-select {
     font-size: 1rem;
+  }
+
+  .lit-find-desktop {
+    display: none;
+  }
+
+  .lit-find-mobile {
+    display: inline;
   }
 
   .lit-toolbar-field {
@@ -801,22 +813,6 @@ body:is([data-slug="index"], [data-slug="02-literature/index"])
 
   .sidebar.left .explorer.collapsed > .explorer-content {
     display: none;
-  }
-}
-
-@media (max-width: 420px) {
-  .page > #quartz-body > .sidebar.left .search > .search-button {
-    width: 2.5rem;
-    padding: 0;
-    justify-content: center;
-
-    & > p {
-      display: none;
-    }
-
-    & > svg {
-      margin: 0;
-    }
   }
 }
 

@@ -1,23 +1,10 @@
 /**
- * LitFilter — the single source of truth for client-side search / sorting
- * of the literature cards.
- *
- * Two faces:
- *  1. LIT_FILTER_SCRIPT (string): a self-contained browser script defining
- *     window.LitFilter. Shipped verbatim via the page body's afterDOMLoaded —
- *     no extra HTTP request, no build step.
- *  2. create(...) (TS): the same controller behind that script, used by the
- *     bootstrap string in index.ts.
- *
- * Design: one tag = one page = one list. Tag filtering happens at build time
- * (each tag page SSRs only its own papers); this controller only handles
- * text search and sort order — the two dimensions that cannot be
- * precomputed. Its URL contract is ?q=&sort=, so any view is shareable and
- * browser back/forward restores it without a reload.
+ * Sort the complete literature list. Text lookup belongs to the browser's Find
+ * command, so every paper stays visible and old ?q= links cannot hide results.
+ * The ?sort= parameter preserves the selected order across reloads and history.
  */
 
 export interface LitFilterState {
-  query: string
   sort: string
 }
 
@@ -33,7 +20,6 @@ window.LitFilter = (function () {
 
   function stateToParams(s) {
     var p = new URLSearchParams()
-    if (s.query) p.set("q", s.query)
     if (s.sort !== DEFAULT_SORT) p.set("sort", s.sort)
     return p
   }
@@ -42,18 +28,16 @@ window.LitFilter = (function () {
     var p = new URLSearchParams(search)
     var sort = p.get("sort")
     return {
-      query: p.get("q") || "",
       sort: sort ? sort : DEFAULT_SORT,
     }
   }
 
   function sameState(a, b) {
-    return a.query === b.query && a.sort === b.sort
+    return a.sort === b.sort
   }
 
   function create(dom, initial) {
     var state = {
-      query: initial.query || "",
       sort: initial.sort || DEFAULT_SORT,
     }
     var suppressSync = false
@@ -68,24 +52,17 @@ window.LitFilter = (function () {
       var qs = params.toString()
       var url = location.pathname + (qs ? "?" + qs : "") + location.hash
       try {
-        if (push) history.pushState({ litFilter: true }, "", url)
-        else history.replaceState({ litFilter: true }, "", url)
+        if (push) history.pushState(history.state, "", url)
+        else history.replaceState(history.state, "", url)
       } catch (e) { /* history unavailable */ }
     }
 
     function isDefaultView() {
-      return state.sort === DEFAULT_SORT && !state.query
+      return state.sort === DEFAULT_SORT
     }
 
     function apply() {
-      var q = state.query.toLowerCase()
-      var visible = dom.cards.filter(function (item) {
-        if (!q) return true
-        var card = item.querySelector(".lit-card")
-        if (!card) return false
-        var hay = (card.getAttribute("data-search") || "").toLowerCase()
-        return hay.indexOf(q) !== -1
-      })
+      var visible = dom.cards.slice()
 
       var cmp = {
         "added-desc": function (a, b) { return num(b, "data-added") - num(a, "data-added") || byTitle(a, b) },
@@ -114,7 +91,11 @@ window.LitFilter = (function () {
         dom.groups.forEach(function (g) {
           var ul = g.querySelector(".lit-list")
           var items = byGroup.get(g.id) || []
-          items.forEach(function (item) { ul.appendChild(item) })
+          items.forEach(function (item) {
+            var stamp = item.querySelector(".lit-added")
+            if (stamp) stamp.remove()
+            ul.appendChild(item)
+          })
           g.style.display = items.length > 0 ? "" : "none"
         })
         dom.flat.classList.add("lit-hidden")
@@ -148,33 +129,32 @@ window.LitFilter = (function () {
     }
 
     // -- events ---------------------------------------------------------------
-    dom.root.addEventListener("change", function (e) {
+    function onChange(e) {
       var t = e.target
       if (t.matches && t.matches("[data-sort-select]")) setState({ sort: t.value })
-    })
-    dom.root.addEventListener("input", function (e) {
-      var t = e.target
-      if (t.matches && t.matches("[data-search-input]")) {
-        state.query = t.value.trim()
-        apply()
-        syncUrl(false) // typing replaces, never pushes
-      }
-    })
-    window.addEventListener("popstate", function () {
+    }
+    function onPopState() {
+      // The SPA router handles navigation between pages.
+      if (!dom.root.isConnected) return
       var next = stateFromSearch(location.search)
       if (sameState(state, next)) return
       suppressSync = true
       state = next
-      if (dom.searchInput) dom.searchInput.value = state.query
       if (dom.sortSelect) dom.sortSelect.value = state.sort
       apply()
       suppressSync = false
-    })
+    }
+    dom.root.addEventListener("change", onChange)
+    window.addEventListener("popstate", onPopState)
+    if (dom.sortSelect) dom.sortSelect.value = state.sort
 
     apply()
     syncUrl(false)
 
-    return { setState: setState, apply: apply }
+    return function () {
+      dom.root.removeEventListener("change", onChange)
+      window.removeEventListener("popstate", onPopState)
+    }
   }
 
   return { create: create, stateFromSearch: stateFromSearch }
@@ -190,14 +170,12 @@ export interface LitFilterDom {
   groups: HTMLElement[]
   groupOf: Map<HTMLElement, string>
   countEl: HTMLElement | null
-  searchInput: HTMLInputElement | null
   sortSelect: HTMLSelectElement | null
 }
 
 export function stateFromSearch(search: string): LitFilterState {
   const p = new URLSearchParams(search)
   return {
-    query: p.get("q") ?? "",
     sort: p.get("sort") || DEFAULT_SORT,
   }
 }

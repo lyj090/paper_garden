@@ -174,53 +174,57 @@ function groupByArea(entries: Entry[]): Group[] {
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
-/** Toolbar for client-side sort / filter of the paper cards. Sort keys are
+/** Toolbar for client-side sorting of the paper cards. Sort keys are
  *  embedded as data-* attributes on each card at build time. */
-/** Client bootstrap: binds the shared filter controller to this page's DOM.
- *  State precedence: URL query string > page's own tag (tag pages) > defaults. */
+/** Rebind sorting after each SPA navigation; dispose the previous listeners. */
 const toolbarScript =
   LIT_FILTER_SCRIPT +
   `;(function () {
-  var root = document.querySelector(".lit-index")
-  if (!root) return
-  var seen = new Set()
-  var cards = []
-  Array.prototype.slice.call(root.querySelectorAll(".lit-item")).forEach(function (item) {
-    // index page lists a paper under every area it belongs to; keep one
-    // canonical card per title so sorting and the count stay accurate
-    var card = item.querySelector(".lit-card")
-    var key = card ? card.getAttribute("data-title") : item.id
-    if (key && seen.has(key)) { item.remove(); return }
-    if (key) seen.add(key)
-    cards.push(item)
-  })
-  if (cards.length === 0) return
-  var flat = root.querySelector(".lit-flat")
-  if (!flat) return
-  var groups = Array.prototype.slice.call(root.querySelectorAll(".lit-group"))
-  var groupOf = new Map()
-  groups.forEach(function (g) {
-    var key = g.id
-    g.querySelectorAll(".lit-item").forEach(function (item) {
-      groupOf.set(item, key)
-      item.remove()
+  var dispose
+  function setup() {
+    if (dispose) dispose()
+    var root = document.querySelector(".lit-index")
+    if (!root) return
+    var seen = new Set()
+    var cards = []
+    Array.prototype.slice.call(root.querySelectorAll(".lit-item")).forEach(function (item) {
+      // index page lists a paper under every area it belongs to; keep one
+      // canonical card per URL so sorting and the count stay accurate
+      var card = item.querySelector(".lit-card")
+      var link = card && card.querySelector(".lit-card-title a")
+      var key = link ? link.getAttribute("href") : item.id
+      if (key && seen.has(key)) { item.remove(); return }
+      if (key) seen.add(key)
+      cards.push(item)
     })
-  })
+    if (cards.length === 0) return
+    var flat = root.querySelector(".lit-flat")
+    if (!flat) return
+    var groups = Array.prototype.slice.call(root.querySelectorAll(".lit-group"))
+    var groupOf = new Map()
+    groups.forEach(function (g) {
+      var key = g.id
+      g.querySelectorAll(".lit-item").forEach(function (item) {
+        groupOf.set(item, key)
+        item.remove()
+      })
+    })
 
-  window.LitFilter.create({
-    root: root,
-    cards: cards,
-    flat: flat,
-    groups: groups,
-    groupOf: groupOf,
-    countEl: root.querySelector(".lit-result-count"),
-    searchInput: root.querySelector("[data-search-input]"),
-    sortSelect: root.querySelector("[data-sort-select]"),
-  }, window.LitFilter.stateFromSearch(location.search))
+    dispose = window.LitFilter.create({
+      root: root,
+      cards: cards,
+      flat: flat,
+      groups: groups,
+      groupOf: groupOf,
+      countEl: root.querySelector(".lit-result-count"),
+      sortSelect: root.querySelector("[data-sort-select]"),
+    }, window.LitFilter.stateFromSearch(location.search))
+  }
+  document.addEventListener("nav", setup)
 })();
 `
 
-function renderToolbar(): ReturnType<typeof h> {
+function renderToolbar(count: number): ReturnType<typeof h> {
   const select = (attr: string, options: [string, string][]): ReturnType<typeof h> =>
     h(
       "select",
@@ -234,19 +238,12 @@ function renderToolbar(): ReturnType<typeof h> {
     h(
       "div",
       { class: "lit-toolbar" },
-      h("input", {
-        class: "lit-toolbar-search",
-        type: "search",
-        placeholder: "搜索标题 / 作者 / 标签…",
-        "data-search-input": "",
-        "aria-label": "搜索文献",
-      }),
       h(
         "label",
         { class: "lit-toolbar-field" },
         h("span", { class: "lit-toolbar-label" }, "排序"),
         select("data-sort-select", [
-          ["added-desc", "入库时间 新→旧"],
+          ["added-desc", "默认顺序"],
           ["added-asc", "入库时间 旧→新"],
           ["year-desc", "论文年份 新→旧"],
           ["year-asc", "论文年份 旧→新"],
@@ -254,7 +251,25 @@ function renderToolbar(): ReturnType<typeof h> {
           ["title-desc", "标题 Z→A"],
         ]),
       ),
-      h("span", { class: "lit-result" }, h("span", { class: "lit-result-count" }), " 篇"),
+      h(
+        "span",
+        { class: "lit-result" },
+        h("span", { class: "lit-result-count" }, String(count)),
+        " 篇",
+      ),
+    ),
+    h(
+      "p",
+      { class: "lit-find-hint" },
+      h(
+        "span",
+        { class: "lit-find-desktop" },
+        "查找本页文献：",
+        h("kbd", {}, "Ctrl+F"),
+        " / ",
+        h("kbd", {}, "⌘F"),
+      ),
+      h("span", { class: "lit-find-mobile" }, "查找本页文献：浏览器菜单 → 在页面中查找"),
     ),
   )
 }
@@ -276,7 +291,7 @@ function renderIndexSection(slug: string, groups: Group[], topicNav: TopicNav[],
         ),
       ),
     ),
-    renderToolbar(),
+    renderToolbar(new Set(groups.flatMap((g) => g.items.map((e) => e.slug))).size),
     h("ul", { class: "lit-flat lit-hidden" }),
     groups.map((g) =>
       h(
@@ -287,10 +302,6 @@ function renderIndexSection(slug: string, groups: Group[], topicNav: TopicNav[],
           "ul",
           { class: "lit-list" },
           g.items.map((e) => {
-            const search = [e.title, e.authors, ...e.topics, e.venue, e.year]
-              .filter(Boolean)
-              .join(" ")
-              .toLowerCase()
             return h(
               "li",
               { class: "lit-item" },
@@ -301,7 +312,6 @@ function renderIndexSection(slug: string, groups: Group[], topicNav: TopicNav[],
                   "data-added": e.date ? String(e.date.getTime()) : "",
                   "data-year": e.year ? String(e.year) : "",
                   "data-title": e.title,
-                  "data-search": search,
                   "data-tags": e.allTags.join("|"),
                 },
                 h(
@@ -514,11 +524,18 @@ function stripPrivateSections(root: Node): void {
           el.children?.every((c) => c.type !== "text" || !((c as any).value ?? "").trim())
         ) {
           const links = el.children?.filter((c) => (c as Element).type === "element") ?? []
-          if (links.length > 0 && links.every((c) => {
-            const link = c as Element
-            const href = String(link.properties?.href ?? "")
-            return link.tagName === "a" && (href.includes("/tags/status/") || href.includes("论文阅读记录"))
-          })) return false
+          if (
+            links.length > 0 &&
+            links.every((c) => {
+              const link = c as Element
+              const href = String(link.properties?.href ?? "")
+              return (
+                link.tagName === "a" &&
+                (href.includes("/tags/status/") || href.includes("论文阅读记录"))
+              )
+            })
+          )
+            return false
         }
       }
       return true
@@ -704,7 +721,7 @@ const css = `
   color: color-mix(in srgb, #d4a72c 75%, var(--darkgray));
 }
 
-/* ---- toolbar: search / filter / sort (client-side over embedded data attrs) ---- */
+/* ---- sorting toolbar; text lookup uses the browser's Find command ---- */
 .lit-toolbar {
   display: flex; flex-wrap: wrap; align-items: center;
   gap: 0.55rem;
@@ -713,20 +730,6 @@ const css = `
   border: 1px solid var(--lightgray);
   border-radius: 10px;
   background: color-mix(in srgb, var(--lightgray) 30%, var(--light));
-}
-.lit-toolbar-search {
-  flex: 1 1 11rem;
-  min-width: 0;
-  font: inherit; font-size: 0.85rem;
-  color: var(--dark);
-  background: var(--light);
-  border: 1px solid var(--lightgray);
-  border-radius: 8px;
-  padding: 0.32rem 0.7rem;
-  outline: none;
-}
-.lit-toolbar-search:focus {
-  border-color: var(--gray);
 }
 .lit-toolbar-field {
   display: inline-flex; align-items: center; gap: 0.35rem;
@@ -775,10 +778,6 @@ const css = `
   display: flex; flex-direction: column; gap: 0.85rem;
 }
 .lit-index .lit-flat.lit-hidden { display: none; }
-@media all and (max-width: 640px) {
-  .lit-result { display: none; }
-  .lit-toolbar-search { flex-basis: 100%; }
-}
 
 /* ---- mobile horizontal quick-nav (hidden on desktop: left sidebar nav takes over) ---- */
 .lit-nav {
@@ -880,7 +879,11 @@ const LiteratureIndexPage: QuartzPageTypePlugin = () => ({
       // ns/<tag> slugs render as "ns/tag" in H1/breadcrumbs — show just the
       // tag segment for a friendlier title (namespaces are an internal detail)
       const title =
-        slug === "tags/index" ? "主题标签" : raw.includes("/") ? raw.split("/").slice(1).join("/") : raw
+        slug === "tags/index"
+          ? "主题标签"
+          : raw.includes("/")
+            ? raw.split("/").slice(1).join("/")
+            : raw
       virtualPages.push({ slug, title, data: {} })
     }
     return virtualPages

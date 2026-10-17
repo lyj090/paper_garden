@@ -138,9 +138,12 @@ const FIGURE_AND_TOC_SCRIPT = `
     run();
   }
   document.addEventListener("nav", run);
-  window.addCleanup(function () {
-    document.removeEventListener("nav", run);
-  });
+  // This resource can run before the SPA router defines its cleanup hook.
+  if (typeof window.addCleanup === "function") {
+    window.addCleanup(function () {
+      document.removeEventListener("nav", run);
+    });
+  }
 })();
 `
 

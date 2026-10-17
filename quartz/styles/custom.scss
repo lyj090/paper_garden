@@ -794,6 +794,11 @@ body:is([data-slug="index"], [data-slug="02-literature/index"])
 
   // Expanded folders set visibility themselves; fully remove the closed drawer
   // so their text cannot leak into the left edge or receive keyboard focus.
+  .sidebar.left .explorer > .explorer-content {
+    width: 100%;
+    max-width: 100%;
+  }
+
   .sidebar.left .explorer.collapsed > .explorer-content {
     display: none;
   }

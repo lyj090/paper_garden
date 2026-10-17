@@ -24,25 +24,25 @@ configuration:
       code: ui-monospace
     colors:
       lightMode:
-        light: "#f8f7f2"
-        lightgray: "#e1e5dd"
-        gray: "#68756c"
-        darkgray: "#39463d"
-        dark: "#24332a"
-        secondary: "#47765b"
-        tertiary: "#2f5b43"
-        highlight: rgba(71, 118, 91, 0.07)
-        textHighlight: "#e3dca880"
+        light: "#faf8f3"
+        lightgray: "#dedad2"
+        gray: "#76716a"
+        darkgray: "#403d38"
+        dark: "#292724"
+        secondary: "#52677d"
+        tertiary: "#354a60"
+        highlight: rgba(82, 103, 125, 0.07)
+        textHighlight: "#ead9a366"
       darkMode:
-        light: "#1f2822"
-        lightgray: "#35443a"
-        gray: "#9aaa9d"
-        darkgray: "#cad6cc"
-        dark: "#e5eee7"
-        secondary: "#9bc5a8"
-        tertiary: "#b8d9c1"
-        highlight: rgba(155, 197, 168, 0.1)
-        textHighlight: "#817b4c66"
+        light: "#282828"
+        lightgray: "#414141"
+        gray: "#a6a29b"
+        darkgray: "#cecbc5"
+        dark: "#e5e1da"
+        secondary: "#a9bbd0"
+        tertiary: "#c5d3e3"
+        highlight: rgba(169, 187, 208, 0.09)
+        textHighlight: "#b5975040"
 plugins:
   - source: github:quartz-community/created-modified-date
     enabled: true

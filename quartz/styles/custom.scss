@@ -8,13 +8,20 @@
   --headerFont: var(--bodyFont);
   --titleFont: var(--bodyFont);
   --codeFont: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  --reading-width: 48rem;
+  --readingFont:
+    "Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif SC", "Songti SC", "STSong", "SimSun",
+    "AR PL UMing CN", Georgia, serif;
+  --reading-width: 52rem;
+  --canvas: #eeece6;
+  --paper-shadow: 0 2px 14px rgb(50 43 32 / 3%);
   --muted: var(--gray);
   --surface: color-mix(in srgb, var(--lightgray) 22%, var(--light));
   color-scheme: light;
 }
 
 :root[saved-theme="dark"] {
+  --canvas: #202020;
+  --paper-shadow: 0 2px 14px rgb(0 0 0 / 8%);
   color-scheme: dark;
 }
 
@@ -26,6 +33,7 @@ html {
 }
 
 body {
+  background: var(--canvas);
   font-size: 1rem;
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
@@ -51,13 +59,13 @@ textarea {
 
 // Explicit zero minimums let wide tables/code scroll inside their column.
 .page {
-  max-width: 90rem;
+  max-width: 96rem;
 }
 
 .page > #quartz-body {
   padding-inline: clamp(1.25rem, 3vw, 3rem);
-  grid-template-columns: $sidePanelWidth minmax(0, var(--reading-width)) $sidePanelWidth;
-  column-gap: 3.5rem;
+  grid-template-columns: 13rem minmax(0, var(--reading-width)) 12rem;
+  column-gap: 2.5rem;
   row-gap: 0;
   justify-content: center;
   align-items: start;
@@ -72,7 +80,7 @@ textarea {
 
   & > .sidebar {
     min-width: 0;
-    padding: 4rem 0 2.5rem;
+    padding: 5.5rem 0 2.5rem;
     gap: 2.25rem;
     height: 100dvh;
     font-size: 0.875rem;
@@ -80,17 +88,27 @@ textarea {
   }
 
   & > .sidebar.left {
-    padding-right: 1.25rem;
-    border-right: 1px solid var(--lightgray);
+    padding-right: 0.5rem;
   }
 
   & > .sidebar.right {
-    padding-left: 1.75rem;
-    border-left: 1px solid var(--lightgray);
+    padding-left: 0.5rem;
+  }
+
+  & > .center {
+    box-sizing: border-box;
+    margin-block: 2.5rem 0;
+    padding: clamp(1.75rem, 3.2vw, 3rem);
+    background: var(--light);
+    border: 1px solid var(--lightgray);
+    border-radius: 3px;
+    box-shadow: var(--paper-shadow);
   }
 
   & .page-header {
-    margin: 4rem 0 2.75rem;
+    margin: 0 0 2.75rem;
+    padding-bottom: 1.75rem;
+    border-bottom: 1px solid var(--lightgray);
   }
 
   & > footer {
@@ -105,9 +123,9 @@ textarea {
 @media all and not ($mobile) {
   .page[data-frame="default"]:has(.lit-index) > #quartz-body,
   .page[data-frame="default"]:has(> #quartz-body > .sidebar.right:empty) > #quartz-body {
-    max-width: 70rem;
+    max-width: 76rem;
     margin-inline: auto;
-    grid-template-columns: $sidePanelWidth minmax(0, var(--reading-width));
+    grid-template-columns: 13rem minmax(0, var(--reading-width));
     grid-template-areas:
       "grid-sidebar-left grid-header"
       "grid-sidebar-left grid-center"
@@ -185,8 +203,14 @@ textarea {
 }
 
 .center article {
-  font-size: 1.075rem;
+  font-family: var(--readingFont);
+  font-size: 1.125rem;
   line-height: 1.95;
+  font-kerning: normal;
+
+  & :is(button, input, select, textarea) {
+    font-family: var(--bodyFont);
+  }
 
   & p,
   & li {
@@ -295,6 +319,14 @@ textarea {
     &:has(.callout-lead-warn) {
       border-inline-start-color: var(--darkgray);
     }
+  }
+
+  // Preserve callout icons and folding while keeping the page ink-like.
+  & .callout[data-callout] {
+    --color: var(--secondary);
+    --border: var(--lightgray);
+    --bg: var(--surface);
+    border-inline-start-color: var(--secondary);
   }
 
   & img {
@@ -548,10 +580,14 @@ button.readermode {
 .lit-toolbar {
   padding: 0.85rem 1rem;
   border: 1px solid var(--lightgray);
-  border-radius: 10px;
+  border-radius: 4px;
   background: var(--surface);
   gap: 0.85rem;
   margin-block: 0 2.25rem;
+}
+
+.lit-toolbar-wrap {
+  margin-block: 1.5rem 2.75rem;
 }
 
 .lit-toolbar-search,
@@ -617,6 +653,16 @@ body[data-slug="02-literature/index"] .article-title {
   display: none;
 }
 
+body:is([data-slug="index"], [data-slug="02-literature/index"])
+  .page
+  > #quartz-body
+  > .center
+  .page-header {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .center > hr {
   margin-block: 2.5rem 0;
 }
@@ -635,6 +681,10 @@ body[data-slug="02-literature/index"] .article-title {
 }
 
 @media all and ($mobile) {
+  body {
+    background: var(--light);
+  }
+
   .page > #quartz-body,
   .page[data-frame="default"]:has(.lit-index) > #quartz-body,
   .page[data-frame="default"]:has(> #quartz-body > .sidebar.right:empty) > #quartz-body {
@@ -647,6 +697,14 @@ body[data-slug="02-literature/index"] .article-title {
       "grid-footer";
     padding-inline: clamp(1rem, 4vw, 2rem);
     column-gap: 0;
+
+    & > .center {
+      margin-block: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
 
     & > .sidebar.left {
       display: grid;
@@ -679,7 +737,11 @@ body[data-slug="02-literature/index"] .article-title {
       }
 
       & .search > .search-button {
-        width: 7rem;
+        width: 2.5rem;
+
+        @media (min-width: 421px) {
+          width: 7rem;
+        }
       }
 
       & > .lit-leftnav,
@@ -711,7 +773,7 @@ body[data-slug="02-literature/index"] .article-title {
   }
 
   .center article {
-    font-size: 1rem;
+    font-size: 1.0625rem;
     line-height: 1.9;
 
     & p {
@@ -728,6 +790,28 @@ body[data-slug="02-literature/index"] .article-title {
 
   .lit-toolbar-field {
     min-width: 0;
+  }
+
+  // Expanded folders set visibility themselves; fully remove the closed drawer
+  // so their text cannot leak into the left edge or receive keyboard focus.
+  .sidebar.left .explorer.collapsed > .explorer-content {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .page > #quartz-body > .sidebar.left .search > .search-button {
+    width: 2.5rem;
+    padding: 0;
+    justify-content: center;
+
+    & > p {
+      display: none;
+    }
+
+    & > svg {
+      margin: 0;
+    }
   }
 }
 
